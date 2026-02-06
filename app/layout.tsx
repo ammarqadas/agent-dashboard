@@ -3,7 +3,7 @@ import "./globals.css"
 import { DirectionProvider } from "@/components/direction-provider"
 
 export const metadata: Metadata = {
-  title: "Shadcn Dashboard",
+  title: "smart agent dashboard",
   description: "A modern dashboard built with shadcn/ui",
 }
 

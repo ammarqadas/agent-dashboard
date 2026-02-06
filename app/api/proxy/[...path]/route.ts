@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const DADIH_API_URL = process.env.DADIH_API_URL || 'http://localhost:3000/api'
+// Get the API URL from environment variable
+const DADIH_API_URL = process.env.DADIH_API_URL
+
+// Validate that DADIH_API_URL is set (required in production)
+if (!DADIH_API_URL) {
+  console.error('ERROR: DADIH_API_URL environment variable is not set!')
+  console.error('Please set DADIH_API_URL in your Vercel project settings.')
+  console.error('For local development, create .env.local with: DADIH_API_URL=http://localhost:3000/api')
+}
+
+// Warn if using localhost in production (won't work in serverless)
+if (DADIH_API_URL && (DADIH_API_URL.includes('localhost') || DADIH_API_URL.includes('127.0.0.1'))) {
+  if (process.env.VERCEL) {
+    console.error('ERROR: DADIH_API_URL points to localhost, which will not work in Vercel serverless functions!')
+    console.error('Please set DADIH_API_URL to your actual backend API URL in Vercel project settings.')
+  }
+}
 
 function corsHeaders(req: NextRequest) {
   const origin = req.headers.get('origin')
@@ -60,6 +76,27 @@ async function handleProxy(
   pathSegments: string[],
   method: string
 ) {
+  // #region agent log
+  const hasApiUrl = !!DADIH_API_URL
+  const apiUrlValue = DADIH_API_URL ? (DADIH_API_URL.includes('localhost') || DADIH_API_URL.includes('127.0.0.1') ? 'localhost' : 'external') : 'missing'
+  fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:handleProxy',message:'Proxy request started',data:{hasApiUrl,apiUrlType:apiUrlValue,isVercel:!!process.env.VERCEL,path:pathSegments.join('/'),method},timestamp:Date.now(),sessionId:'debug-session',runId:'proxy-fix',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+
+  // Check if DADIH_API_URL is configured
+  if (!DADIH_API_URL) {
+    console.error('DADIH_API_URL is not set')
+    return NextResponse.json(
+      { 
+        success: false, 
+        message: 'Server configuration error: DADIH_API_URL environment variable is not set. Please configure it in Vercel project settings.' 
+      },
+      { 
+        status: 500,
+        headers: corsHeaders(request),
+      }
+    )
+  }
+
   try {
     const path = pathSegments.join('/')
     const url = new URL(request.url)
@@ -67,6 +104,10 @@ async function handleProxy(
     
     // url.search already includes the leading '?'
     const targetUrl = `${DADIH_API_URL}/${path}${queryString || ''}`
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:handleProxy',message:'About to fetch target URL',data:{targetUrl,method},timestamp:Date.now(),sessionId:'debug-session',runId:'proxy-fix',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     
     // Forward auth + cookies
     const authHeader = request.headers.get('authorization')
@@ -110,11 +151,34 @@ async function handleProxy(
       headers: corsHeaders(request),
     })
   } catch (error) {
+    // #region agent log
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorCode = error instanceof Error && 'code' in error ? (error as any).code : null
+    const errorCause = error instanceof Error && error.cause ? String(error.cause) : null
+    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:handleProxy',message:'Proxy error caught',data:{errorMessage,errorCode,errorCause,targetUrl:DADIH_API_URL,method},timestamp:Date.now(),sessionId:'debug-session',runId:'proxy-fix',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
     console.error('Proxy error:', error)
+    console.error('Target URL was:', DADIH_API_URL)
+    
+    // Provide more helpful error messages
+    let userMessage = 'Proxy request failed'
+    if (error instanceof Error) {
+      if (error.message.includes('ECONNREFUSED') || error.message.includes('fetch failed')) {
+        if (DADIH_API_URL?.includes('localhost') || DADIH_API_URL?.includes('127.0.0.1')) {
+          userMessage = 'Cannot connect to localhost from serverless function. Please set DADIH_API_URL to your actual backend API URL in Vercel project settings.'
+        } else {
+          userMessage = `Cannot connect to backend API at ${DADIH_API_URL}. Please verify the URL is correct and the server is accessible.`
+        }
+      } else {
+        userMessage = error.message
+      }
+    }
+    
     return NextResponse.json(
       { 
         success: false, 
-        message: error instanceof Error ? error.message : 'Proxy request failed' 
+        message: userMessage 
       },
       { 
         status: 500,
