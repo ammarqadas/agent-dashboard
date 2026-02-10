@@ -42,7 +42,7 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       // #region agent log
       const storedToken = localStorage.getItem('agentToken')
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:43',message:'ApiClient constructor - token loaded',data:{hasToken:!!storedToken,tokenLength:storedToken?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:43', message: 'ApiClient constructor - token loaded', data: { hasToken: !!storedToken, tokenLength: storedToken?.length || 0 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
       // #endregion
       this.token = storedToken
     }
@@ -53,7 +53,7 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       // #region agent log
       localStorage.setItem('agentToken', token)
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:50',message:'setToken called - token saved',data:{tokenLength:token.length,tokenPrefix:token.substring(0,10)+'...'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:50', message: 'setToken called - token saved', data: { tokenLength: token.length, tokenPrefix: token.substring(0, 10) + '...' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
       // #endregion
     }
   }
@@ -70,7 +70,7 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       const storedToken = localStorage.getItem('agentToken')
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:reloadToken',message:'Reloading token from localStorage',data:{hadToken:!!this.token,hasStoredToken:!!storedToken,tokenChanged:this.token!==storedToken},timestamp:Date.now(),sessionId:'debug-session',runId:'token-fix',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:reloadToken', message: 'Reloading token from localStorage', data: { hadToken: !!this.token, hasStoredToken: !!storedToken, tokenChanged: this.token !== storedToken }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'A' }) }).catch(() => { });
       // #endregion
       this.token = storedToken
     }
@@ -79,7 +79,7 @@ class ApiClient {
   // Handle 403/401 responses by clearing token and redirecting
   private handleAuthError() {
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:handleAuthError',message:'Handling authentication error',data:{hadToken:!!this.token},timestamp:Date.now(),sessionId:'debug-session',runId:'token-fix',hypothesisId:'B'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:handleAuthError', message: 'Handling authentication error', data: { hadToken: !!this.token }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'B' }) }).catch(() => { });
     // #endregion
     this.clearToken()
     if (typeof window !== 'undefined') {
@@ -96,16 +96,16 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     // Reload token from localStorage before each request to ensure we have the latest token
     this.reloadToken()
-    
+
     // Ensure endpoint starts with / if baseUrl doesn't end with /
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
     const url = `${this.baseUrl}${cleanEndpoint}`
-    
+
     // Debug: log the URL being called (remove in production)
     if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
       console.log('[API Client] Requesting:', url)
     }
-    
+
     const headers = new Headers(options.headers)
     // Ensure JSON by default, but never force it for FormData (multipart)
     const isFormData =
@@ -123,7 +123,7 @@ class ApiClient {
     const tokenInInstance = !!this.token
     const tokenInStorage = typeof window !== 'undefined' ? !!localStorage.getItem('agentToken') : false
     const tokenValue = this.token ? `${this.token.substring(0, 10)}...` : null
-    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:request',message:'Request about to be sent',data:{endpoint,hasAuthHeader,tokenInInstance,tokenInStorage,tokenPrefix:tokenValue,method:options.method||'GET'},timestamp:Date.now(),sessionId:'debug-session',runId:'token-fix',hypothesisId:'C'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:request', message: 'Request about to be sent', data: { endpoint, hasAuthHeader, tokenInInstance, tokenInStorage, tokenPrefix: tokenValue, method: options.method || 'GET' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'C' }) }).catch(() => { });
     // #endregion
 
     try {
@@ -133,13 +133,13 @@ class ApiClient {
       })
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:request',message:'Response received',data:{endpoint,status:response.status,statusText:response.statusText,hasAuthHeader},timestamp:Date.now(),sessionId:'debug-session',runId:'token-fix',hypothesisId:'D'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:request', message: 'Response received', data: { endpoint, status: response.status, statusText: response.statusText, hasAuthHeader }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'D' }) }).catch(() => { });
       // #endregion
 
       // Handle 401/403 authentication errors
       if (response.status === 401 || response.status === 403) {
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:request',message:'Received 401/403 - handling auth error',data:{endpoint,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'token-fix',hypothesisId:'B'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:request', message: 'Received 401/403 - handling auth error', data: { endpoint, status: response.status }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'B' }) }).catch(() => { });
         // #endregion
         this.handleAuthError()
         const data = await response.json().catch(() => ({}))
@@ -198,7 +198,7 @@ class ApiClient {
   }
 
   // Activate/deactivate wallet
-  async updateWallet(id: string | number, data: { active?: boolean; [key: string]: any }) {
+  async updateWallet(id: string | number, data: { active?: boolean;[key: string]: any }) {
     return this.request(`/wallets/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -247,10 +247,57 @@ class ApiClient {
     params.append('limit', limit.toString())
     // #region agent log
     const endpoint = `/cashout-codes/agent-list?${params.toString()}`
-    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:188',message:'Using agent-list endpoint',data:{endpoint,status},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'FIX'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:188', message: 'Using agent-list endpoint', data: { endpoint, status }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'post-fix', hypothesisId: 'FIX' }) }).catch(() => { });
     // #endregion
     // Use agent-list endpoint for agents (authenticated as users collection)
     return this.request(endpoint)
+  }
+
+  // Agent Bulk Deposit
+  async agentBulkDeposit(deposits: { mobile: string; amount: number; currency: string | number; notes?: string }[]) {
+    return this.request('/agent/deposit', {
+      method: 'POST',
+      body: JSON.stringify({ deposits }),
+    })
+  }
+
+  // Agent Remittance
+  async agentRemittance(data: {
+    senderName: string
+    senderMobile: string
+    receiverName: string
+    receiverMobile: string
+    amount: number
+    currency: string | number
+    notes?: string
+    commission?: number
+    totalAmount?: number
+    distWallet?: string | number
+  }) {
+    return this.request('/agent/remittance', {
+      method: 'POST',
+      body: JSON.stringify({ payload: data }),
+    })
+  }
+
+  // Agent Bulk Remittance
+  async agentBulkRemittance(data: {
+    senderName: string
+    senderMobile: string
+    currency: string | number
+    distWallet: string | number
+    remittances: {
+      amount: number
+      receiverName: string
+      receiverMobile: string
+    }[]
+    notes?: string
+    commission?: number
+  }) {
+    return this.request('/agent/bulk-remittance', {
+      method: 'POST',
+      body: JSON.stringify({ payload: data }),
+    })
   }
 
   // Transactions
@@ -286,6 +333,11 @@ class ApiClient {
   // Get currencies
   async getCurrencies() {
     return this.request('/currencies')
+  }
+
+  // Get distribution wallets (system wallets for transfer network)
+  async getDistWallets() {
+    return this.request('/agent/dist-wallets')
   }
 
   // Get account by ID

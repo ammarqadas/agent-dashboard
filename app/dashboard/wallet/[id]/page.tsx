@@ -70,21 +70,38 @@ export default function WalletDetailPage() {
       </div>
 
       <Tabs defaultValue="details" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="details">التفاصيل</TabsTrigger>
-          <TabsTrigger value="identity">الهوية</TabsTrigger>
-          <TabsTrigger value="deposit">إيداع</TabsTrigger>
-        </TabsList>
+        <div className="border-b border-border/50 mb-6">
+          <TabsList className="grid w-full grid-cols-3 h-12 bg-transparent p-0 gap-1">
+            <TabsTrigger 
+              value="details" 
+              className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 rounded-none rounded-t-lg"
+            >
+              التفاصيل
+            </TabsTrigger>
+            <TabsTrigger 
+              value="identity"
+              className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 rounded-none rounded-t-lg"
+            >
+              الهوية
+            </TabsTrigger>
+            <TabsTrigger 
+              value="deposit"
+              className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 rounded-none rounded-t-lg"
+            >
+              إيداع
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="details" className="mt-6">
+        <TabsContent value="details" className="mt-0 animate-in fade-in duration-200">
           <WalletView wallet={wallet} />
         </TabsContent>
 
-        <TabsContent value="identity" className="mt-6">
+        <TabsContent value="identity" className="mt-0 animate-in fade-in duration-200">
           <WalletIdentity wallet={wallet} onUpdated={loadWallet} />
         </TabsContent>
 
-        <TabsContent value="deposit" className="mt-6">
+        <TabsContent value="deposit" className="mt-0 animate-in fade-in duration-200">
           <WalletDeposit mobile={wallet?.mobile} onSuccess={loadWallet} />
         </TabsContent>
       </Tabs>

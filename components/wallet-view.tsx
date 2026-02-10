@@ -17,21 +17,26 @@ export function WalletView({ wallet }: WalletViewProps) {
 
   const walletId = walletData.id || walletData._id
 
-  const handleToggleActive = async () => {
+  const handleActivate = async () => {
+    // Agents can only activate wallets, not deactivate them
+    if (isActive) {
+      return // Wallet is already active, do nothing
+    }
+    
     setIsUpdating(true)
     try {
       const response = await apiClient.updateWallet(walletData.id, {
-        active: !walletData.active,
+        active: true,
       })
       
       if (response.success) {
         setWalletData((prev: any) => ({
           ...prev,
-          active: !prev.active,
+          active: true,
         }))
       }
     } catch (err) {
-      console.error("Failed to update wallet:", err)
+      console.error("Failed to activate wallet:", err)
     } finally {
       setIsUpdating(false)
     }
@@ -111,17 +116,15 @@ export function WalletView({ wallet }: WalletViewProps) {
         )}
 
         <div className="flex gap-2 pt-4">
-          <Button
-            onClick={handleToggleActive}
-            disabled={isUpdating}
-            variant={isActive ? "destructive" : "default"}
-          >
-            {isUpdating
-              ? "جاري التحديث..."
-              : isActive
-              ? "إيقاف المحفظة"
-              : "تفعيل المحفظة"}
-          </Button>
+          {!isActive && (
+            <Button
+              onClick={handleActivate}
+              disabled={isUpdating}
+              variant="default"
+            >
+              {isUpdating ? "جاري التفعيل..." : "تفعيل المحفظة"}
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => router.push(`/dashboard/wallet/${walletId}`)}

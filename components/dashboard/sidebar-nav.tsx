@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   UserRound,
   Wallet,
+  ArrowRightLeft,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -38,6 +39,7 @@ const NAV: Array<{ title: string; items: NavItem[] }> = [
   {
     title: "العمليات",
     items: [
+      { href: "/dashboard/remittance", label: "حوالة", icon: ArrowRightLeft },
       { href: "/dashboard/cashout-codes", label: "أكواد السحب", icon: Barcode },
       { href: "/dashboard/transactions", label: "سجل العمليات", icon: Coins },
     ],

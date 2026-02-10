@@ -16,9 +16,21 @@ import {
 import { Separator } from "@/components/ui/separator"
 
 function mediaUrl(m: any): string | null {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet-identity.tsx:18',message:'mediaUrl called',data:{input:m,type:typeof m,isString:typeof m === 'string',isObject:typeof m === 'object'},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   if (!m) return null
-  if (typeof m === "string" || typeof m === "number") return null
-  return m.url || m?.sizes?.square?.url || m?.sizes?.thumbnail?.url || null
+  // If it's already a string URL, return it
+  if (typeof m === "string" && m.startsWith("http")) return m
+  // If it's an object, try to get the URL
+  if (typeof m === "object") {
+    const url = m.url || m?.sizes?.square?.url || m?.sizes?.thumbnail?.url || null
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet-identity.tsx:24',message:'mediaUrl result',data:{url,hasUrl:!!m.url,hasSizesSquare:!!m?.sizes?.square?.url,hasSizesThumbnail:!!m?.sizes?.thumbnail?.url,objectKeys:Object.keys(m || {})},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    return url
+  }
+  return null
 }
 
 export function WalletIdentity({
@@ -29,6 +41,10 @@ export function WalletIdentity({
   onUpdated?: () => void
 }) {
   const card = wallet?.card && typeof wallet.card === "object" ? wallet.card : null
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet-identity.tsx:36',message:'WalletIdentity component render',data:{hasWallet:!!wallet,hasCard:!!card,walletKeys:wallet ? Object.keys(wallet) : [],cardKeys:card ? Object.keys(card) : [],idImageFront:card?.idImageFront,idImageBack:card?.idImageBack,idImageSelfi:card?.idImageSelfi,imageProperty:card?.image,imageType:typeof card?.image,imageKeys:card?.image ? Object.keys(card.image) : []},timestamp:Date.now(),runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
 
   const [fullName, setFullName] = useState<string>(card?.fullName || "")
   const [idNumber, setIdNumber] = useState<string>(card?.idNumber || "")
@@ -48,13 +64,33 @@ export function WalletIdentity({
   const [success, setSuccess] = useState<string>("")
 
   const existingImages = useMemo(() => {
-    const imgs: Array<{ label: string; url: string }> = []
-    const frontUrl = mediaUrl(card?.idImageFront)
-    const backUrl = mediaUrl(card?.idImageBack)
-    const selfiUrl = mediaUrl(card?.idImageSelfi)
-    if (frontUrl) imgs.push({ label: "Front", url: frontUrl })
-    if (backUrl) imgs.push({ label: "Back", url: backUrl })
-    if (selfiUrl) imgs.push({ label: "Selfie", url: selfiUrl })
+    const imgs: Array<{ label: string; labelAr: string; url: string }> = []
+    
+    // Try individual fields first (if populated with proper depth)
+    let frontUrl = mediaUrl(card?.idImageFront)
+    let backUrl = mediaUrl(card?.idImageBack)
+    let selfiUrl = mediaUrl(card?.idImageSelfi)
+    
+    // If individual fields are not available, check the image array
+    // The image array might contain the images in order: [front, back, selfie]
+    if (!frontUrl && !backUrl && !selfiUrl && card?.image) {
+      const imageArray = Array.isArray(card.image) ? card.image : [card.image]
+      if (imageArray.length > 0) frontUrl = mediaUrl(imageArray[0])
+      if (imageArray.length > 1) backUrl = mediaUrl(imageArray[1])
+      if (imageArray.length > 2) selfiUrl = mediaUrl(imageArray[2])
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet-identity.tsx:66',message:'existingImages useMemo',data:{frontUrl,backUrl,selfiUrl,hasImageArray:!!card?.image,imageArrayLength:Array.isArray(card?.image) ? card.image.length : (card?.image ? 1 : 0),imagesCount:imgs.length},timestamp:Date.now(),runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
+    if (frontUrl) imgs.push({ label: "Front", labelAr: "صورة الهوية (أمام)", url: frontUrl })
+    if (backUrl) imgs.push({ label: "Back", labelAr: "صورة الهوية (خلف)", url: backUrl })
+    if (selfiUrl) imgs.push({ label: "Selfie", labelAr: "صورة سيلفي", url: selfiUrl })
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet-identity.tsx:75',message:'existingImages final result',data:{finalCount:imgs.length,images:imgs.map(i => ({label:i.label,url:i.url}))},timestamp:Date.now(),runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     return imgs
   }, [card])
 
@@ -131,25 +167,50 @@ export function WalletIdentity({
             </div>
           )}
 
+          {/* #region agent log */}
+          {(() => {
+            fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet-identity.tsx:139',message:'Rendering check for existingImages',data:{existingImagesLength:existingImages.length,willRender:existingImages.length > 0},timestamp:Date.now(),runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            return null;
+          })()}
+          {/* #endregion */}
           {existingImages.length > 0 && (
             <>
               <Separator />
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Existing images</div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {existingImages.map((img) => (
-                    <div key={img.label} className="rounded-lg border p-2">
-                      <div className="mb-2 text-xs text-muted-foreground">
-                        {img.label}
+              <div className="space-y-4">
+                <div className="text-base font-semibold">صور الهوية</div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {existingImages.map((img) => {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet-identity.tsx:182',message:'Rendering image',data:{label:img.label,url:img.url,urlType:typeof img.url},timestamp:Date.now(),runId:'run2',hypothesisId:'D'})}).catch(()=>{});
+                    // #endregion
+                    return (
+                      <div key={img.label} className="rounded-lg border overflow-hidden bg-card">
+                        <div className="p-3 bg-muted/50 border-b">
+                          <div className="text-sm font-medium text-right">{img.labelAr}</div>
+                        </div>
+                        <div className="p-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={img.url}
+                            alt={img.labelAr}
+                            className="w-full rounded-md object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            style={{ minHeight: "200px", maxHeight: "300px" }}
+                            onClick={() => window.open(img.url, "_blank")}
+                            onError={(e) => {
+                              // #region agent log
+                              fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet-identity.tsx:195',message:'Image load error',data:{label:img.label,url:img.url},timestamp:Date.now(),runId:'run2',hypothesisId:'D'})}).catch(()=>{});
+                              // #endregion
+                            }}
+                            onLoad={() => {
+                              // #region agent log
+                              fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet-identity.tsx:201',message:'Image loaded successfully',data:{label:img.label,url:img.url},timestamp:Date.now(),runId:'run2',hypothesisId:'D'})}).catch(()=>{});
+                              // #endregion
+                            }}
+                          />
+                        </div>
                       </div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={img.url}
-                        alt={img.label}
-                        className="h-40 w-full rounded-md object-cover"
-                      />
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             </>
