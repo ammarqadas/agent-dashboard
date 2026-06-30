@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  // basePath: '/agents',
+  // basePath: '/',
   // Enable CORS for API routes
   async headers() {
     return [

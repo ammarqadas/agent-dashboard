@@ -237,7 +237,7 @@ export function RemittanceForm() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         {distWallets.map((wallet) => (
-                                            <SelectItem key={wallet.id} value={String(wallet.id)} className="text-right">
+                                            <SelectItem key={wallet.key} value={wallet.key} className="text-right">
                                                 {wallet.name}
                                             </SelectItem>
                                         ))}

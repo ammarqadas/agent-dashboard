@@ -173,7 +173,7 @@ class ApiClient {
   // Agent authentication
   async agentLogin(email: string, password: string) {
     const response = await this.request<{ token: string; user: any }>(
-      '/users/login',
+      '/agents/login',
       {
         method: 'POST',
         body: JSON.stringify({ email, password }),
@@ -336,8 +336,13 @@ class ApiClient {
   }
 
   // Get distribution wallets (system wallets for transfer network)
+  // Backend returns { success, networks: [...] } — normalize to { success, docs: [...] }
   async getDistWallets() {
-    return this.request('/agent/dist-wallets')
+    const response = await this.request('/agent/dist-wallets')
+    if (response.success && response.networks && !response.docs) {
+      response.docs = response.networks
+    }
+    return response
   }
 
   // Get account by ID
