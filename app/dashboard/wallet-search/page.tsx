@@ -4,14 +4,12 @@ export default function WalletSearchPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Search Wallet</h2>
+        <h2 className="text-3xl font-bold tracking-tight">بحث عن محفظة</h2>
         <p className="text-muted-foreground">
-          Search for customer wallets by mobile number
+          البحث عن محافظ العملاء برقم الجوال
         </p>
       </div>
       <WalletSearch />
     </div>
   )
 }
-
-

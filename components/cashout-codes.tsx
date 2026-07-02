@@ -76,18 +76,8 @@ export function CashoutCodes() {
   const loadCashoutCodes = async () => {
     setIsLoading(true)
     try {
-      // #region agent log
-      const tokenBeforeList = typeof window !== 'undefined' ? localStorage.getItem('agentToken') : null
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cashout-codes.tsx:78',message:'loadCashoutCodes called',data:{hasToken:!!tokenBeforeList,tokenLength:tokenBeforeList?.length||0,statusFilter},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      
       const status = statusFilter === "all" ? undefined : statusFilter
       const response = await apiClient.listCashoutCodes(status)
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cashout-codes.tsx:82',message:'loadCashoutCodes response',data:{success:response.success,message:response.message,hasToken:!!tokenBeforeList},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      
       if (response.success) {
         setCodes(response.cashoutCodes || response.docs || [])
       }
@@ -105,36 +95,36 @@ export function CashoutCodes() {
       const response = await apiClient.searchCashoutCode(searchCode.trim())
       if (response.success) {
         setSearchResult(response.cashoutCode)
-        showNotice("success", "Cashout code found", `Code ${searchCode.trim()} loaded.`)
+        showNotice("success", "تم العثور على الكود", `كود ${searchCode.trim()} موجود.`)
       } else {
         setSearchResult(null)
-        showNotice("error", "Not found", response.message || "Cashout code not found")
+        showNotice("error", "غير موجود", response.message || "كود السحب غير موجود")
       }
     } catch (err) {
       console.error("Search failed:", err)
-      showNotice("error", "Search failed", "Please try again.")
+      showNotice("error", "فشل البحث", "يرجى المحاولة مرة أخرى.")
     } finally {
       setIsSearching(false)
     }
   }
 
   const handlePayCode = async (code: string) => {
-    if (!confirm("Are you sure you want to pay this cashout code?")) return
+    if (!confirm("هل أنت متأكد من دفع كود السحب؟")) return
 
     try {
       const response = await apiClient.payCashoutCode(code)
       if (response.success) {
-        showNotice("success", "Paid successfully", `Cashout code ${code} was paid.`)
+        showNotice("success", "تم الدفع بنجاح", `كود السحب ${code} تم دفعه.`)
         loadCashoutCodes()
         if (searchResult?.code === code) {
           handleSearch({ preventDefault: () => {} } as any)
         }
       } else {
-        showNotice("error", "Payment failed", response.message || "Failed to pay cashout code")
+        showNotice("error", "فشل الدفع", response.message || "فشل في دفع كود السحب")
       }
     } catch (err) {
       console.error("Pay failed:", err)
-      showNotice("error", "Payment error", "An error occurred while paying the code.")
+      showNotice("error", "خطأ في الدفع", "حدث خطأ أثناء دفع الكود.")
     }
   }
 
@@ -149,21 +139,11 @@ export function CashoutCodes() {
         return
       }
 
-      // #region agent log
-      const tokenBeforeCreate = typeof window !== 'undefined' ? localStorage.getItem('agentToken') : null
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cashout-codes.tsx:138',message:'Before createCashoutCode',data:{hasToken:!!tokenBeforeCreate,tokenLength:tokenBeforeCreate?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
-
       const response = await apiClient.createCashoutCode(
         createForm.mobile,
         amount,
         createForm.currency
       )
-
-      // #region agent log
-      const tokenAfterCreate = typeof window !== 'undefined' ? localStorage.getItem('agentToken') : null
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cashout-codes.tsx:148',message:'After createCashoutCode',data:{success:response.success,hasToken:!!tokenAfterCreate,tokenLength:tokenAfterCreate?.length||0,tokenChanged:tokenBeforeCreate!==tokenAfterCreate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
 
       if (response.success) {
         const createdCode = response.code || response.result?.code
@@ -179,11 +159,6 @@ export function CashoutCodes() {
         
         showNotice("success", "تم إنشاء كود السحب بنجاح", messageParts.join(" | "))
         setCreateForm({ mobile: "", amount: "", currency: "" })
-        
-        // #region agent log
-        const tokenBeforeLoad = typeof window !== 'undefined' ? localStorage.getItem('agentToken') : null
-        fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cashout-codes.tsx:149',message:'Before loadCashoutCodes call',data:{hasToken:!!tokenBeforeLoad,tokenLength:tokenBeforeLoad?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
         
         // Refresh the list
         await loadCashoutCodes()
@@ -242,7 +217,7 @@ export function CashoutCodes() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Cashout Codes</CardTitle>
+                  <CardTitle>أكواد السحب</CardTitle>
                   <CardDescription>عرض وإدارة أكواد السحب</CardDescription>
                 </div>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -260,18 +235,18 @@ export function CashoutCodes() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <p>Loading...</p>
+                <p>جاري التحميل...</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Code</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Currency</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Wallet</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>الكود</TableHead>
+                      <TableHead>المبلغ</TableHead>
+                      <TableHead>العملة</TableHead>
+                      <TableHead>الحالة</TableHead>
+                      <TableHead>المحفظة</TableHead>
+                      <TableHead>تاريخ الإنشاء</TableHead>
+                      <TableHead>الإجراءات</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -295,10 +270,10 @@ export function CashoutCodes() {
                           <TableCell>
                             {typeof code.wallet === "object"
                               ? code.wallet.mobile || code.wallet.name
-                              : "N/A"}
+                              : "غير متوفر"}
                           </TableCell>
                           <TableCell>
-                            {new Date(code.createdAt).toLocaleDateString()}
+                            {new Date(code.createdAt).toLocaleDateString("ar-EG")}
                           </TableCell>
                           <TableCell>
                             {code.status === "pending" && (
@@ -353,19 +328,19 @@ export function CashoutCodes() {
 
               {searchResult && (
                 <div className="mt-6 p-4 border rounded-lg space-y-2">
-                  <h3 className="font-semibold">Code Details</h3>
-                  <p><strong>Code:</strong> {searchResult.code}</p>
-                  <p><strong>Amount:</strong> {searchResult.amount}</p>
-                  <p><strong>Currency:</strong>{" "}
+                  <h3 className="font-semibold">تفاصيل الكود</h3>
+                  <p><strong>الكود:</strong> {searchResult.code}</p>
+                  <p><strong>المبلغ:</strong> {searchResult.amount}</p>
+                  <p><strong>العملة:</strong>{" "}
                     {typeof searchResult.currency === "object"
                       ? searchResult.currency.code
                       : searchResult.currency}
                   </p>
-                  <p><strong>Status:</strong> {getStatusBadge(searchResult.status)}</p>
-                  <p><strong>Wallet:</strong>{" "}
+                  <p><strong>الحالة:</strong> {getStatusBadge(searchResult.status)}</p>
+                  <p><strong>المحفظة:</strong>{" "}
                     {typeof searchResult.wallet === "object"
                       ? `${searchResult.wallet.name} (${searchResult.wallet.mobile})`
-                      : "N/A"}
+                      : "غير متوفر"}
                   </p>
                   {searchResult.status === "pending" && (
                     <Button
@@ -457,4 +432,3 @@ export function CashoutCodes() {
     </div>
   )
 }
-

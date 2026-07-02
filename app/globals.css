@@ -7,53 +7,54 @@
 
 @layer base {
   :root {
-    /* Teal/Emerald accent theme - professional and fresh */
-    --background: 180 10% 98%;
+    /* Shumul Cash brand: deep teal + warm gold */
+    --background: 40 10% 97%;
     --foreground: 200 25% 15%;
     --card: 0 0% 100%;
     --card-foreground: 200 25% 15%;
     --popover: 0 0% 100%;
     --popover-foreground: 200 25% 15%;
-    --primary: 166 72% 35%;
+    --primary: 178 72% 28%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 180 15% 94%;
+    --secondary: 40 15% 94%;
     --secondary-foreground: 200 25% 20%;
-    --muted: 180 12% 92%;
+    --muted: 40 12% 92%;
     --muted-foreground: 200 15% 45%;
-    --accent: 166 60% 92%;
-    --accent-foreground: 166 72% 25%;
+    --accent: 46 85% 45%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 180 15% 88%;
-    --input: 180 15% 88%;
-    --ring: 166 72% 35%;
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 178 72% 28%;
     --radius: 0.625rem;
-    
+
     /* Custom gradient stops */
-    --gradient-start: 166 72% 35%;
-    --gradient-end: 186 72% 45%;
+    --gradient-start: 178 72% 28%;
+    --gradient-end: 186 70% 38%;
+    --gradient-gold: 46 85% 45%;
   }
 
   .dark {
     --background: 200 25% 10%;
-    --foreground: 180 10% 95%;
+    --foreground: 40 10% 95%;
     --card: 200 25% 12%;
-    --card-foreground: 180 10% 95%;
+    --card-foreground: 40 10% 95%;
     --popover: 200 25% 12%;
-    --popover-foreground: 180 10% 95%;
-    --primary: 166 72% 45%;
+    --popover-foreground: 40 10% 95%;
+    --primary: 178 72% 40%;
     --primary-foreground: 200 25% 10%;
     --secondary: 200 20% 18%;
-    --secondary-foreground: 180 10% 90%;
+    --secondary-foreground: 40 10% 90%;
     --muted: 200 20% 18%;
-    --muted-foreground: 180 10% 60%;
-    --accent: 166 40% 20%;
-    --accent-foreground: 166 72% 60%;
+    --muted-foreground: 40 10% 60%;
+    --accent: 46 60% 35%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 62% 45%;
     --destructive-foreground: 0 0% 100%;
     --border: 200 20% 20%;
     --input: 200 20% 20%;
-    --ring: 166 72% 45%;
+    --ring: 178 72% 40%;
   }
 }
 
@@ -168,6 +169,13 @@
     background-clip: text;
   }
 
+  .text-gradient-gold {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--gradient-gold)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
   /* Card hover effect */
   .card-hover {
     @apply transition-all duration-200;
@@ -182,13 +190,14 @@
     @apply bg-card/80 backdrop-blur-md border border-border/50;
   }
 
-  /* Stat card styling */
+  /* Stat card styling - minimal */
   .stat-card {
-    @apply relative overflow-hidden rounded-xl border bg-card p-5;
+    @apply rounded-xl border border-border/60 bg-card p-5 transition-all duration-200 hover:shadow-md hover:border-primary/30;
   }
-  .stat-card::before {
-    content: "";
-    @apply absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none;
+
+  /* Dashboard stat card - minimal */
+  .dash-stat-card {
+    @apply rounded-xl border border-border/60 bg-card p-4 transition-all duration-200 hover:shadow-md hover:border-primary/30;
   }
 
   /* Icon container */
@@ -212,9 +221,9 @@
     @apply bg-muted/50;
   }
 
-  /* Form field group */
+  /* Form field group - minimal */
   .field-group {
-    @apply rounded-lg border bg-muted/30 p-4 space-y-4;
+    @apply rounded-lg border border-border/60 bg-card p-4;
   }
 
   /* Section title */
@@ -225,5 +234,18 @@
     content: "";
     @apply w-1 h-5 bg-primary rounded-full;
   }
-}
 
+  /* Form utilities - minimal */
+  .form-section {
+    @apply rounded-xl border border-border/60 bg-card p-5;
+  }
+  .form-section-title {
+    @apply text-sm font-semibold text-muted-foreground mb-4 flex items-center gap-2;
+  }
+  .form-field {
+    @apply space-y-2;
+  }
+  .input-icon-wrapper {
+    @apply relative;
+  }
+}

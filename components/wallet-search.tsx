@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { apiClient } from "@/lib/api"
 import { WalletView } from "./wallet-view"
+import { Search, Smartphone, Loader2, UserCircle } from "lucide-react"
 
 export function WalletSearch() {
   const [mobile, setMobile] = useState("")
@@ -22,9 +23,8 @@ export function WalletSearch() {
 
     try {
       const response = await apiClient.searchWalletByMobile(mobile.trim())
-      
+
       if (response.success && response.wallet) {
-        // Fetch full wallet details
         const walletResponse = await apiClient.getWallet(response.wallet.id)
         if (walletResponse.success) {
           setWallet(walletResponse.data || walletResponse)
@@ -32,54 +32,90 @@ export function WalletSearch() {
           setWallet(response.wallet)
         }
       } else {
-        setError(response.message || "Wallet not found")
+        setError(response.message || "لم يتم العثور على محفظة بهذا الرقم")
       }
     } catch (err) {
-      setError("An error occurred. Please try again.")
+      setError("حدث خطأ. يرجى المحاولة مرة أخرى.")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="border bg-card/80 shadow-sm">
-        <CardHeader>
-          <CardTitle>البحث عن محفظة برقم الجوال</CardTitle>
-          <CardDescription>
-            أدخل رقم الجوال للبحث عن المحفظة
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSearch} className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3 items-end">
-              <div className="flex-1 space-y-2 w-full">
-                <Label htmlFor="mobile" className="text-right block">رقم الجوال</Label>
-                <Input
-                  id="mobile"
-                  type="tel"
-                  placeholder="أدخل رقم الجوال"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
-                  required
-                  dir="ltr"
-                />
-              </div>
-              <Button type="submit" disabled={isLoading} className="min-w-32 sm:min-w-40">
-                {isLoading ? "جاري البحث..." : "بحث"}
-              </Button>
+    <div className="space-y-5">
+      {/* Search Form Card - minimal */}
+      <Card className="rounded-xl border border-border/60">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-3">
+            <div className="icon-container">
+              <UserCircle className="h-5 w-5" />
             </div>
+            <div>
+              <CardTitle className="text-lg">البحث عن محفظة</CardTitle>
+              <CardDescription>
+                أدخل رقم جوال العميل للبحث عن محفظته
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <form onSubmit={handleSearch} className="space-y-4">
+            {/* Search Input */}
+            <div className="input-icon-wrapper">
+              <Smartphone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+              <Input
+                id="mobile"
+                type="tel"
+                placeholder="رقم الجوال (مثال: 777123456)"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                required
+                dir="ltr"
+                className="pr-10"
+              />
+            </div>
+
+            {/* Error Message */}
             {error && (
-              <p className="text-sm text-destructive">{error}</p>
+              <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-3 text-center">
+                <p className="text-sm text-destructive font-medium">{error}</p>
+              </div>
             )}
+
+            {/* Search Button */}
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full h-11 font-semibold"
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>جاري البحث...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  <span>بحث</span>
+                </div>
+              )}
+            </Button>
           </form>
+
+          {/* Help Text */}
+          <div className="text-center text-xs text-muted-foreground">
+            <p>يمكنك البحث برقم الجوال المسجل لدى المحفظة</p>
+          </div>
         </CardContent>
       </Card>
 
+      {/* Results */}
       {wallet && (
-        <WalletView wallet={wallet} />
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <WalletView wallet={wallet} />
+        </div>
       )}
     </div>
   )
 }
-

@@ -1,61 +1,15 @@
-"use client"
-
-import { Suspense } from "react"
-import { WalletBulkDeposit } from "@/components/dashboard/wallet-bulk-deposit"
 import { WalletDeposit } from "@/components/wallet-deposit"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useSearchParams } from "next/navigation"
-
-function DepositTabs() {
-  const searchParams = useSearchParams()
-  const tabParam = searchParams.get("tab")
-  const defaultTab = tabParam === "bulk" ? "bulk" : "single"
-
-  return (
-    <Tabs defaultValue={defaultTab} className="w-full">
-      <div className="border-b border-border/50 mb-6">
-        <TabsList className="grid w-full grid-cols-2 h-12 bg-transparent p-0 gap-1">
-          <TabsTrigger 
-            value="single"
-            className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 rounded-none rounded-t-lg"
-          >
-            إيداع واحد
-          </TabsTrigger>
-          <TabsTrigger 
-            value="bulk"
-            className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-primary/5 rounded-none rounded-t-lg"
-          >
-            استيراد جماعي
-          </TabsTrigger>
-        </TabsList>
-      </div>
-      <TabsContent value="single" className="mt-0 animate-in fade-in duration-200">
-        <WalletDeposit />
-      </TabsContent>
-      <TabsContent value="bulk" className="mt-0 animate-in fade-in duration-200">
-        <WalletBulkDeposit />
-      </TabsContent>
-    </Tabs>
-  )
-}
 
 export default function DepositPage() {
   return (
-    <div className="container mx-auto max-w-4xl space-y-8 p-6 md:p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">إيداع إلى محفظة</h1>
-          <p className="text-muted-foreground mt-1">
-            إضافة رصيد إلى محافظ العملاء
-          </p>
-        </div>
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">إيداع رصيد</h1>
+        <p className="text-muted-foreground mt-1">
+          إضافة رصيد إلى محفظة العميل
+        </p>
       </div>
-
-      <Suspense fallback={<div className="text-center py-8">جاري التحميل...</div>}>
-        <DepositTabs />
-      </Suspense>
+      <WalletDeposit />
     </div>
   )
 }
-
-

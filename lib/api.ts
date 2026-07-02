@@ -40,21 +40,14 @@ class ApiClient {
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
     if (typeof window !== 'undefined') {
-      // #region agent log
-      const storedToken = localStorage.getItem('agentToken')
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:43', message: 'ApiClient constructor - token loaded', data: { hasToken: !!storedToken, tokenLength: storedToken?.length || 0 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-      // #endregion
-      this.token = storedToken
+      this.token = localStorage.getItem('agentToken')
     }
   }
 
   setToken(token: string) {
     this.token = token
     if (typeof window !== 'undefined') {
-      // #region agent log
       localStorage.setItem('agentToken', token)
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:50', message: 'setToken called - token saved', data: { tokenLength: token.length, tokenPrefix: token.substring(0, 10) + '...' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
-      // #endregion
     }
   }
 
@@ -68,19 +61,12 @@ class ApiClient {
   // Reload token from localStorage (useful when token might have been updated)
   private reloadToken() {
     if (typeof window !== 'undefined') {
-      const storedToken = localStorage.getItem('agentToken')
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:reloadToken', message: 'Reloading token from localStorage', data: { hadToken: !!this.token, hasStoredToken: !!storedToken, tokenChanged: this.token !== storedToken }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'A' }) }).catch(() => { });
-      // #endregion
-      this.token = storedToken
+      this.token = localStorage.getItem('agentToken')
     }
   }
 
   // Handle 403/401 responses by clearing token and redirecting
   private handleAuthError() {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:handleAuthError', message: 'Handling authentication error', data: { hadToken: !!this.token }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'B' }) }).catch(() => { });
-    // #endregion
     this.clearToken()
     if (typeof window !== 'undefined') {
       localStorage.removeItem('isAuthenticated')
@@ -118,29 +104,14 @@ class ApiClient {
       headers.set('Authorization', `Bearer ${this.token}`)
     }
 
-    // #region agent log
-    const hasAuthHeader = headers.has('Authorization')
-    const tokenInInstance = !!this.token
-    const tokenInStorage = typeof window !== 'undefined' ? !!localStorage.getItem('agentToken') : false
-    const tokenValue = this.token ? `${this.token.substring(0, 10)}...` : null
-    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:request', message: 'Request about to be sent', data: { endpoint, hasAuthHeader, tokenInInstance, tokenInStorage, tokenPrefix: tokenValue, method: options.method || 'GET' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'C' }) }).catch(() => { });
-    // #endregion
-
     try {
       const response = await fetch(url, {
         ...options,
         headers,
       })
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:request', message: 'Response received', data: { endpoint, status: response.status, statusText: response.statusText, hasAuthHeader }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'D' }) }).catch(() => { });
-      // #endregion
-
       // Handle 401/403 authentication errors
       if (response.status === 401 || response.status === 403) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:request', message: 'Received 401/403 - handling auth error', data: { endpoint, status: response.status }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'token-fix', hypothesisId: 'B' }) }).catch(() => { });
-        // #endregion
         this.handleAuthError()
         const data = await response.json().catch(() => ({}))
         return {
@@ -189,7 +160,7 @@ class ApiClient {
 
   // Wallet search by mobile
   async searchWalletByMobile(mobile: string) {
-    return this.request(`/wallets/search?mobile=${encodeURIComponent(mobile)}`)
+    return this.request(`/agent/wallet-search?mobile=${encodeURIComponent(mobile)}`)
   }
 
   // Get wallet details
@@ -207,16 +178,15 @@ class ApiClient {
 
   // Deposit to wallet
   async depositToWallet(mobile: string, amount: number, currency: string | number, notes?: string) {
-    return this.request('/wallets/transaction', {
+    return this.request('/agent/deposit', {
       method: 'POST',
       body: JSON.stringify({
-        actionKey: 'deposit',
-        payload: {
+        deposits: [{
           mobile,
           amount,
           currency,
           notes,
-        },
+        }],
       }),
     })
   }
@@ -245,10 +215,7 @@ class ApiClient {
     if (status) params.append('status', status)
     params.append('page', page.toString())
     params.append('limit', limit.toString())
-    // #region agent log
     const endpoint = `/cashout-codes/agent-list?${params.toString()}`
-    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api.ts:188', message: 'Using agent-list endpoint', data: { endpoint, status }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'post-fix', hypothesisId: 'FIX' }) }).catch(() => { });
-    // #endregion
     // Use agent-list endpoint for agents (authenticated as users collection)
     return this.request(endpoint)
   }
@@ -306,19 +273,17 @@ class ApiClient {
   }
 
   async getTransactions(filters?: {
-    walletId?: string | number
-    accountId?: string | number
     page?: number
     limit?: number
+    sort?: string
   }) {
     const params = new URLSearchParams()
-    if (filters?.walletId) params.append('walletId', String(filters.walletId))
-    if (filters?.accountId) params.append('accountId', String(filters.accountId))
     if (filters?.page) params.append('page', String(filters.page))
     if (filters?.limit) params.append('limit', String(filters.limit))
-    // Request with depth=2 to populate account relationships with names
-    params.append('depth', '2')
-    return this.request(`/transactions?${params.toString()}`)
+    if (filters?.sort) params.append('sort', filters.sort)
+    // /agent/transactions automatically scopes to the authenticated agent's wallet
+    // and returns pre-formatted account names + direction field
+    return this.request(`/agent/transactions?${params.toString()}`)
   }
 
   // Agent account
@@ -327,7 +292,7 @@ class ApiClient {
   }
 
   async getAgentInfo() {
-    return this.request('/users/me')
+    return this.request('/agents/me')
   }
 
   // Get currencies
@@ -381,4 +346,3 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient(API_BASE_URL)
-

@@ -11,10 +11,11 @@ import { Menu, LogOut, User } from "lucide-react"
 // Route titles mapping
 const routeTitles: Record<string, string> = {
   "/dashboard": "لوحة التحكم",
-  "/dashboard/wallet-search": "بحث عن محفظة",
-  "/dashboard/deposit": "إيداع",
-  "/dashboard/cashout-codes": "أكواد السحب",
-  "/dashboard/transactions": "المعاملات",
+  "/dashboard/wallet-search": "تفعيل حساب محفظة",
+  "/dashboard/wallet": "تفاصيل المحفظة",
+  "/dashboard/deposit": "ايداع نقدي",
+  "/dashboard/cashout-codes": " سحب نقدس",
+  "/dashboard/transactions": "كشف حساب",
   "/dashboard/account": "حسابي",
 }
 

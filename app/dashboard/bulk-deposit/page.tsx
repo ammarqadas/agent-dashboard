@@ -10,5 +10,5 @@ export default function BulkDepositPage() {
         router.replace("/dashboard/deposit?tab=bulk")
     }, [router])
 
-    return null
+    return <div className="flex items-center justify-center min-h-[200px]"><p className="text-muted-foreground">جاري إعادة التوجيه...</p></div>
 }

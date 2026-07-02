@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert } from "@/components/ui/alert"
 import {
   Select,
   SelectContent,
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { CheckCircle2, XCircle } from "lucide-react"
+import { CheckCircle2, XCircle, Wallet, Smartphone, Coins, Loader2 } from "lucide-react"
 import { apiClient } from "@/lib/api"
 
 interface WalletDepositProps {
@@ -32,7 +32,6 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
   const [currencies, setCurrencies] = useState<any[]>([])
 
   useEffect(() => {
-    // Fetch available currencies
     const fetchCurrencies = async () => {
       try {
         const response = await apiClient.getCurrencies()
@@ -67,29 +66,31 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
         notes || undefined
       )
 
-      if (response.success) {
-        // Get currency name for success message
+      const results = (response as any).data?.results
+      const depositResult = results?.[0]
+
+      const depositSuccess = depositResult ? depositResult.success : response.success
+
+      if (depositSuccess) {
         const selectedCurrency = currencies.find(c => String(c.id) === currency)
         const currencyCode = selectedCurrency?.code || currency
-        
+
         setSuccess(`تم الإيداع بنجاح! المبلغ: ${amountNum.toFixed(2)} ${currencyCode} إلى المحفظة ${mobile}`)
-        
-        // Reset form completely
+
         if (!propMobile) {
           setMobile("")
         }
         setAmount("")
         setCurrency("")
         setNotes("")
-        
-        // Clear success message after 5 seconds
+
         setTimeout(() => {
           setSuccess("")
         }, 5000)
-        
+
         if (onSuccess) onSuccess()
       } else {
-        setError(response.message || "فشل في معالجة الإيداع")
+        setError(depositResult?.message || response.message || "فشل في معالجة الإيداع")
       }
     } catch (err: any) {
       setError(err.message || "حدث خطأ أثناء معالجة الإيداع. يرجى المحاولة مرة أخرى.")
@@ -99,48 +100,66 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
   }
 
   return (
-    <Card className="border bg-card/80 shadow-sm">
-      <CardHeader>
-        <CardTitle>إيداع إلى محفظة</CardTitle>
-        <CardDescription>
-          إضافة رصيد إلى محفظة العميل
-        </CardDescription>
+    <Card className="rounded-xl border border-border/60">
+      <CardHeader className="pb-4">
+        <div className="flex items-center gap-3">
+          <div className="icon-container">
+            <Wallet className="h-5 w-5" />
+          </div>
+          <div>
+            <CardTitle className="text-lg">إيداع إلى محفظة</CardTitle>
+            <CardDescription>
+              إضافة رصيد إلى محفظة العميل
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="rounded-lg border bg-muted/20 p-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              {!propMobile && (
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="mobile" className="text-right block">رقم الجوال</Label>
+
+      <CardContent className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Form fields */}
+          <div className="form-section space-y-4">
+            {!propMobile && (
+              <div className="form-field">
+                <Label htmlFor="mobile" className="text-sm font-medium">رقم الجوال</Label>
+                <div className="input-icon-wrapper">
+                  <Smartphone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                   <Input
                     id="mobile"
                     type="tel"
-                    placeholder="أدخل رقم الجوال"
+                    placeholder="7xxxxxxxx"
                     value={mobile}
                     onChange={(e) => setMobile(e.target.value)}
                     required
                     dir="ltr"
-                    className="text-left"
+                    className="pr-10"
                   />
                 </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="amount" className="text-right block">المبلغ</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  required
-                  dir="ltr"
-                />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="currency" className="text-right block">العملة</Label>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="form-field">
+                <Label htmlFor="amount" className="text-sm font-medium">المبلغ</Label>
+                <div className="input-icon-wrapper">
+                  <Coins className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                  <Input
+                    id="amount"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="0.00"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    required
+                    dir="ltr"
+                    className="pr-10 font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="form-field">
+                <Label htmlFor="currency" className="text-sm font-medium">العملة</Label>
                 <Select value={currency} onValueChange={setCurrency} required>
                   <SelectTrigger className="text-right [&>span]:text-right">
                     <SelectValue placeholder="اختر العملة" />
@@ -154,51 +173,56 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="notes" className="text-right block">ملاحظات (اختياري)</Label>
-                <Input
-                  id="notes"
-                  type="text"
-                  placeholder="اكتب ملاحظة..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
+            </div>
+
+            <div className="form-field">
+              <Label htmlFor="notes" className="text-sm font-medium">ملاحظات (اختياري)</Label>
+              <Input
+                id="notes"
+                type="text"
+                placeholder="اكتب ملاحظة..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
             </div>
           </div>
-          
+
+          {/* Error Alert */}
           {error && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="rounded-xl">
               <XCircle className="h-4 w-4" />
-              <div>
-                <AlertTitle>خطأ</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </div>
+              <div className="font-medium">{error}</div>
             </Alert>
           )}
-          
+
+          {/* Success Alert */}
           {success && (
-            <Alert className="border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/20">
+            <Alert className="rounded-xl border-emerald-500/50 bg-emerald-50">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <div>
-                <AlertTitle className="text-emerald-800 dark:text-emerald-200 font-bold">
-                  تم بنجاح!
-                </AlertTitle>
-                <AlertDescription className="text-emerald-700 dark:text-emerald-300 mt-1">
-                  {success}
-                </AlertDescription>
-              </div>
+              <div className="text-emerald-800 font-medium">{success}</div>
             </Alert>
           )}
-          
-          <div className="flex justify-end">
-            <Button type="submit" disabled={isLoading} className="min-w-40">
-              {isLoading ? "جاري التنفيذ..." : "إيداع"}
-            </Button>
-          </div>
+
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="w-full h-11 font-semibold"
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>جاري التنفيذ...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4" />
+                <span>إيداع</span>
+              </div>
+            )}
+          </Button>
         </form>
       </CardContent>
     </Card>
   )
 }
-

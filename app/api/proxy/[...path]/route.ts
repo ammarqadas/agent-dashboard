@@ -76,12 +76,6 @@ async function handleProxy(
   pathSegments: string[],
   method: string
 ) {
-  // #region agent log
-  const hasApiUrl = !!DADIH_API_URL
-  const apiUrlValue = DADIH_API_URL ? (DADIH_API_URL.includes('localhost') || DADIH_API_URL.includes('127.0.0.1') ? 'localhost' : 'external') : 'missing'
-  fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:handleProxy',message:'Proxy request started',data:{hasApiUrl,apiUrlType:apiUrlValue,isVercel:!!process.env.VERCEL,path:pathSegments.join('/'),method},timestamp:Date.now(),sessionId:'debug-session',runId:'proxy-fix',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-
   // Check if DADIH_API_URL is configured
   if (!DADIH_API_URL) {
     console.error('DADIH_API_URL is not set')
@@ -104,10 +98,6 @@ async function handleProxy(
     
     // url.search already includes the leading '?'
     const targetUrl = `${DADIH_API_URL}/${path}${queryString || ''}`
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:handleProxy',message:'About to fetch target URL',data:{targetUrl,method},timestamp:Date.now(),sessionId:'debug-session',runId:'proxy-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     
     // Forward auth + cookies
     const authHeader = request.headers.get('authorization')
@@ -151,13 +141,6 @@ async function handleProxy(
       headers: corsHeaders(request),
     })
   } catch (error) {
-    // #region agent log
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const errorCode = error instanceof Error && 'code' in error ? (error as any).code : null
-    const errorCause = error instanceof Error && error.cause ? String(error.cause) : null
-    fetch('http://127.0.0.1:7242/ingest/8d3c5a92-a0d4-40b2-9563-508743174ab0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:handleProxy',message:'Proxy error caught',data:{errorMessage,errorCode,errorCause,targetUrl:DADIH_API_URL,method},timestamp:Date.now(),sessionId:'debug-session',runId:'proxy-fix',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-    
     console.error('Proxy error:', error)
     console.error('Target URL was:', DADIH_API_URL)
     
@@ -201,4 +184,3 @@ export async function OPTIONS(
     },
   })
 }
-

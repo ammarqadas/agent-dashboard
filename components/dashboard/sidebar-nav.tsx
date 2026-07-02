@@ -8,10 +8,11 @@ import {
   Circle,
   LayoutDashboard,
   Search,
-  ShieldCheck,
   UserRound,
   Wallet,
   ArrowRightLeft,
+  Upload,
+  ArrowRight,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -32,16 +33,18 @@ const NAV: Array<{ title: string; items: NavItem[] }> = [
   {
     title: "المحافظ",
     items: [
-      { href: "/dashboard/wallet-search", label: "بحث عن محفظة", icon: Search },
-      { href: "/dashboard/deposit", label: "إيداع", icon: Wallet },
+      { href: "/dashboard/wallet-search", label: "تفعيل حساب محفظة", icon: Search },
+      { href: "/dashboard/deposit", label: "إيداع نقدي", icon: Wallet },
     ],
   },
   {
     title: "العمليات",
     items: [
-      { href: "/dashboard/remittance", label: "حوالة", icon: ArrowRightLeft },
-      { href: "/dashboard/cashout-codes", label: "أكواد السحب", icon: Barcode },
-      { href: "/dashboard/transactions", label: "سجل العمليات", icon: Coins },
+      { href: "/dashboard/deposit/bulk", label: "إيداع جماعي", icon: Upload },
+      { href: "/dashboard/remittance", label: "حوالة الى حساب", icon: ArrowRightLeft },
+      { href: "/dashboard/remittance/bulk", label: "حوالة جماعية", icon: ArrowRight },
+      { href: "/dashboard/cashout-codes", label: " سحب نقدي", icon: Barcode },
+      { href: "/dashboard/transactions", label: "كشف حساب", icon: Coins },
     ],
   },
   {
@@ -58,21 +61,24 @@ export function SidebarNav({
   onNavigate?: () => void
 }) {
   const pathname = usePathname()
-  const BrandIcon = ShieldCheck || Circle
 
   return (
     <div className={cn("flex h-full flex-col bg-card", className)}>
       {/* Brand Header */}
       <div className="px-4 py-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-emerald-600 text-white shadow-lg shadow-primary/25">
-            <BrandIcon className="h-6 w-6" />
+        <Link href="/dashboard" className="flex items-center gap-3" onClick={onNavigate}>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm border border-border/50 overflow-hidden">
+            <img
+              src="/logo.png"
+              alt="شمول كاش"
+              className="h-9 w-9 object-contain"
+            />
           </div>
-          <div className="leading-tight">
-            <div className="text-base font-bold">لوحة الوكيل</div>
-            <div className="text-xs text-muted-foreground">إدارة العمليات</div>
+          <div className="leading-tight min-w-0">
+            <div className="text-base font-bold text-foreground truncate">شمول كاش</div>
+            <div className="text-xs text-muted-foreground">Shumul Cash</div>
           </div>
-        </div>
+        </Link>
       </div>
 
       <Separator className="mx-4" />
@@ -117,11 +123,9 @@ export function SidebarNav({
       {/* Footer */}
       <div className="px-4 py-4 border-t">
         <div className="rounded-lg bg-muted/50 p-3 text-center">
-          <p className="text-xs text-muted-foreground">الإصدار 1.0</p>
+          <p className="text-xs text-muted-foreground">شمول كاش v1.0</p>
         </div>
       </div>
     </div>
   )
 }
-
-
