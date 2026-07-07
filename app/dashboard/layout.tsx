@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api"
 import { SidebarNav } from "@/components/dashboard/sidebar-nav"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Toaster } from "sonner"
 import { Menu, LogOut, User } from "lucide-react"
 
 // Route titles mapping
@@ -14,8 +15,11 @@ const routeTitles: Record<string, string> = {
   "/dashboard/wallet-search": "تفعيل حساب محفظة",
   "/dashboard/wallet": "تفاصيل المحفظة",
   "/dashboard/deposit": "ايداع نقدي",
-  "/dashboard/cashout-codes": " سحب نقدس",
+  "/dashboard/cashout-codes": "قائمة أكواد السحب",
+  "/dashboard/cashout-codes/search": "بحث عن كود سحب",
+  "/dashboard/cashout-codes/create": "إنشاء كود سحب",
   "/dashboard/transactions": "كشف حساب",
+  "/dashboard/remittance-search": "بحث ودفع حوالة",
   "/dashboard/account": "حسابي",
 }
 
@@ -54,10 +58,14 @@ export default function DashboardLayout({
     router.push("/")
   }
 
-  // Get current page title
+  // Get current page title (prefer exact match first)
   const currentTitle = Object.entries(routeTitles).find(([path]) => 
-    pathname === path || (path !== "/dashboard" && pathname?.startsWith(path))
-  )?.[1] || "لوحة الوكيل"
+    pathname === path
+  )?.[1] 
+  || Object.entries(routeTitles)
+    .sort(([a], [b]) => b.length - a.length) // longer paths first
+    .find(([path]) => path !== "/dashboard" && pathname?.startsWith(path))?.[1]
+  || "لوحة الوكيل"
 
   return (
     <div className="min-h-screen bg-background">
@@ -120,6 +128,7 @@ export default function DashboardLayout({
           </main>
         </div>
       </div>
+      <Toaster position="top-left" richColors closeButton dir="rtl" />
     </div>
   )
 }

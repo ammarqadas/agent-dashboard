@@ -1,4 +1,4 @@
-import { CashoutCodes } from "@/components/cashout-codes"
+import { CashoutCodeList } from "@/components/cashout-codes"
 
 export default function CashoutCodesPage() {
   return (
@@ -6,10 +6,10 @@ export default function CashoutCodesPage() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight">أكواد السحب</h2>
         <p className="text-muted-foreground">
-          إنشاء ودفع وإدارة أكواد السحب
+          عرض وإدارة أكواد السحب النقدي
         </p>
       </div>
-      <CashoutCodes />
+      <CashoutCodeList />
     </div>
   )
 }

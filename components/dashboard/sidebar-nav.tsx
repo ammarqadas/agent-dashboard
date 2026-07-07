@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  Barcode,
   Coins,
   Circle,
   LayoutDashboard,
@@ -13,6 +12,8 @@ import {
   ArrowRightLeft,
   Upload,
   ArrowRight,
+  List,
+  Plus,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -22,29 +23,36 @@ type NavItem = {
   href: string
   label: string
   icon: React.ComponentType<{ className?: string }>
-  exact?: boolean
 }
 
 const NAV: Array<{ title: string; items: NavItem[] }> = [
   {
     title: "نظرة عامة",
-    items: [{ href: "/dashboard", label: "لوحة التحكم", icon: LayoutDashboard, exact: true }],
+    items: [{ href: "/dashboard", label: "لوحة التحكم", icon: LayoutDashboard }],
   },
   {
-    title: "المحافظ",
+    title: "العمليات الفردية",
     items: [
       { href: "/dashboard/wallet-search", label: "تفعيل حساب محفظة", icon: Search },
       { href: "/dashboard/deposit", label: "إيداع نقدي", icon: Wallet },
+      { href: "/dashboard/remittance", label: "حوالة الى حساب", icon: ArrowRightLeft },
+      { href: "/dashboard/remittance-search", label: "دفع حوالة", icon: Search },
+      { href: "/dashboard/transactions", label: "كشف حساب", icon: Coins },
     ],
   },
   {
-    title: "العمليات",
+    title: "العمليات الجماعية",
     items: [
       { href: "/dashboard/deposit/bulk", label: "إيداع جماعي", icon: Upload },
-      { href: "/dashboard/remittance", label: "حوالة الى حساب", icon: ArrowRightLeft },
       { href: "/dashboard/remittance/bulk", label: "حوالة جماعية", icon: ArrowRight },
-      { href: "/dashboard/cashout-codes", label: " سحب نقدي", icon: Barcode },
-      { href: "/dashboard/transactions", label: "كشف حساب", icon: Coins },
+    ],
+  },
+  {
+    title: "أكواد السحب النقدي",
+    items: [
+      { href: "/dashboard/cashout-codes", label: "قائمة الأكواد", icon: List },
+      { href: "/dashboard/cashout-codes/search", label: "بحث عن كود", icon: Search },
+      { href: "/dashboard/cashout-codes/create", label: "إنشاء كود جديد", icon: Plus },
     ],
   },
   {
@@ -92,9 +100,7 @@ export function SidebarNav({
             </div>
             <div className="space-y-1">
               {group.items.map((item) => {
-                const active = item.exact
-                  ? pathname === item.href
-                  : pathname?.startsWith(item.href)
+                const active = pathname === item.href
 
                 const Icon = item.icon || Circle
 

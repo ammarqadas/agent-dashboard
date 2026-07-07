@@ -16,8 +16,8 @@ const quickActions = [
     href: "/dashboard/deposit",
   },
   {
-    title: "حوالة الى حساب",
-    description: "حوالة الى حساب جديد",
+    title: "حوالة الى حساب ",
+    description: "حوالة مالية  الى حساب  ",
     icon: ArrowRightLeft,
     href: "/dashboard/remittance",
   },

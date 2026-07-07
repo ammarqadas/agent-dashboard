@@ -228,8 +228,28 @@ class ApiClient {
     })
   }
 
-  // Agent Remittance
-  async agentRemittance(data: {
+  // Search Remittance — POST /api/presubmit/execute
+  async agentRemittanceSearch(networkKey: string, remittanceId: string) {
+    return this.request('/presubmit/execute', {
+      method: 'POST',
+      body: JSON.stringify({ networkKey, configType: "search", remittanceId }),
+    })
+  }
+
+  // Commission (preSubmit) — POST /api/presubmit/execute
+  async agentRemittanceCommission(data: {
+    amount: number
+    networkKey: string
+    currencyCode: string
+  }) {
+    return this.request('/presubmit/execute', {
+      method: 'POST',
+      body: JSON.stringify({ configType: "preSubmit", ...data }),
+    })
+  }
+
+  // Send Remittance — POST /api/agent/action/execute-generic
+  async agentRemittanceSend(networkKey: string, payload: {
     senderName: string
     senderMobile: string
     receiverName: string
@@ -239,11 +259,31 @@ class ApiClient {
     notes?: string
     commission?: number
     totalAmount?: number
-    distWallet?: string | number
+    searchToken?: string
   }) {
-    return this.request('/agent/remittance', {
+    return this.request('/agent/action/execute-generic', {
       method: 'POST',
-      body: JSON.stringify({ payload: data }),
+      body: JSON.stringify({ networkKey, configType: "send", ...payload }),
+    })
+  }
+
+  // Pay Remittance — POST /api/agent/action/execute-generic
+  async agentRemittancePay(networkKey: string, payload: {
+    searchToken: string
+    amount: number
+    currency?: string | number
+    senderName?: string
+    senderMobile?: string
+    receiverName?: string
+    receiverMobile?: string
+    idNumber?: string
+    type?: string
+    expdate?: string
+    [key: string]: any
+  }) {
+    return this.request('/agent/action/execute-generic', {
+      method: 'POST',
+      body: JSON.stringify({ networkKey, configType: "pay", ...payload }),
     })
   }
 
@@ -281,8 +321,6 @@ class ApiClient {
     if (filters?.page) params.append('page', String(filters.page))
     if (filters?.limit) params.append('limit', String(filters.limit))
     if (filters?.sort) params.append('sort', filters.sort)
-    // /agent/transactions automatically scopes to the authenticated agent's wallet
-    // and returns pre-formatted account names + direction field
     return this.request(`/agent/transactions?${params.toString()}`)
   }
 
@@ -301,7 +339,6 @@ class ApiClient {
   }
 
   // Get distribution wallets (system wallets for transfer network)
-  // Backend returns { success, networks: [...] } — normalize to { success, docs: [...] }
   async getDistWallets() {
     const response = await this.request('/agent/dist-wallets')
     if (response.success && response.networks && !response.docs) {

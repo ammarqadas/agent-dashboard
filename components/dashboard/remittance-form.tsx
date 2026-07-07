@@ -13,7 +13,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { CheckCircle2, XCircle, ArrowRightLeft, User, Phone, Coins, Loader2 } from "lucide-react"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { CheckCircle2, XCircle, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle } from "lucide-react"
 import { apiClient } from "@/lib/api"
 
 export function RemittanceForm() {
@@ -33,6 +42,23 @@ export function RemittanceForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState<any>(null)
+  const [isFetchingCommission, setIsFetchingCommission] = useState(false)
+  const [showDialog, setShowDialog] = useState(false)
+  const [confirmData, setConfirmData] = useState<{
+    senderName: string
+    senderMobile: string
+    receiverName: string
+    receiverMobile: string
+    amount: number
+    currencyCode: string
+    notes?: string
+    distWallet?: string | number
+    commission?: {
+      totalCommission: number
+      totalAmount: number
+      searchToken: string
+    }
+  } | null>(null)
 
   useEffect(() => {
     const fetchCurrencies = async () => {
@@ -66,6 +92,8 @@ export function RemittanceForm() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  const requiresCommission = !!formData.distWallet
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -86,15 +114,84 @@ export function RemittanceForm() {
         return
       }
 
-      const response = await apiClient.agentRemittance({
+      const selectedCurrency = currencies.find(c => String(c.id) === formData.currency)
+      const currencyCode = selectedCurrency?.code || 'YER'
+
+      let commissionData: {
+        totalCommission: number
+        totalAmount: number
+        searchToken: string
+      } | undefined
+
+      if (requiresCommission) {
+        setIsFetchingCommission(true)
+        try {
+          const response = await apiClient.agentRemittanceCommission({
+            networkKey: formData.distWallet!,
+            currencyCode,
+            amount: amountNum,
+          })
+          if (response.success) {
+            commissionData = {
+              totalCommission: response.totalCommission ?? response.CenterCommission ?? 0,
+              totalAmount: response.totalAmount ?? amountNum,
+              searchToken: response.searchToken,
+            }
+          } else {
+            setError(response.message || 'فشل احتساب العمولة')
+            setIsLoading(false)
+            setIsFetchingCommission(false)
+            return
+          }
+        } catch (err: any) {
+          setError(err.message || 'حدث خطأ أثناء احتساب العمولة')
+          setIsLoading(false)
+          setIsFetchingCommission(false)
+          return
+        } finally {
+          setIsFetchingCommission(false)
+        }
+      }
+
+      setConfirmData({
         senderName: formData.senderName,
         senderMobile: formData.senderMobile,
         receiverName: formData.receiverName,
         receiverMobile: formData.receiverMobile,
         amount: amountNum,
-        currency: formData.currency,
+        currencyCode,
         notes: formData.notes || undefined,
         distWallet: formData.distWallet || undefined,
+        commission: commissionData || undefined,
+      })
+      setShowDialog(true)
+    } catch (err: any) {
+      setError(err.message || "حدث خطأ غير متوقع")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleConfirmSend = async () => {
+    if (!confirmData) return
+    setError("")
+    setSuccess(null)
+    setIsLoading(true)
+
+    try {
+      const response = await apiClient.agentRemittanceSend(String(confirmData.distWallet || "unified-network"), {
+        senderName: confirmData.senderName,
+        senderMobile: confirmData.senderMobile,
+        receiverName: confirmData.receiverName,
+        receiverMobile: confirmData.receiverMobile,
+        amount: confirmData.amount,
+        currency: confirmData.currencyCode,
+        notes: confirmData.notes,
+        ...(confirmData.commission ? {
+          commission: confirmData.commission.totalCommission,
+          totalAmount: confirmData.commission.totalAmount,
+          searchToken: confirmData.commission.searchToken,
+        } : {}),
       })
 
       if (response.success) {
@@ -109,18 +206,23 @@ export function RemittanceForm() {
           distWallet: '',
           notes: ''
         })
+        setConfirmData(null)
+        setShowDialog(false)
       } else {
         setError(response.message || "فشل في إرسال الحوالة")
+        setShowDialog(false)
       }
 
     } catch (err: any) {
       setError(err.message || "حدث خطأ غير متوقع")
+      setShowDialog(false)
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
+    <>
     <Card className="rounded-xl border border-border/60">
       <CardHeader className="pb-4">
         <div className="flex items-center gap-3">
@@ -128,9 +230,9 @@ export function RemittanceForm() {
             <ArrowRightLeft className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle className="text-lg">إرسال حوالة</CardTitle>
+            <CardTitle className="text-lg">حوالة الى حساب </CardTitle>
             <CardDescription>
-              إرسال حوالة مالية من خلال حساب الوكيل
+              حوالة الى حساب  مالية من خلال حساب الوكيل
             </CardDescription>
           </div>
         </div>
@@ -313,13 +415,13 @@ export function RemittanceForm() {
           {/* Submit Button */}
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isFetchingCommission}
             className="w-full h-11 font-semibold"
           >
-            {isLoading ? (
+            {(isLoading || isFetchingCommission) ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>جاري الإرسال...</span>
+                <span>{isFetchingCommission ? 'جاري احتساب العمولة...' : 'جاري التجهيز...'}</span>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -331,5 +433,89 @@ export function RemittanceForm() {
         </form>
       </CardContent>
     </Card>
+
+    {/* Confirmation Dialog */}
+    <Dialog open={showDialog} onOpenChange={setShowDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            تأكيد إرسال الحوالة
+          </DialogTitle>
+          <DialogDescription>
+            راجع بيانات الحوالة قبل الإرسال
+          </DialogDescription>
+        </DialogHeader>
+
+        {confirmData && (
+          <div className="space-y-4 text-sm">
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">المرسل:</span>
+                <span className="font-medium">{confirmData.senderName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">جوال المرسل:</span>
+                <span className="font-mono" dir="ltr">{confirmData.senderMobile}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">المستلم:</span>
+                <span className="font-medium">{confirmData.receiverName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">جوال المستلم:</span>
+                <span className="font-mono" dir="ltr">{confirmData.receiverMobile}</span>
+              </div>
+              <div className="flex justify-between border-t border-border/50 pt-2">
+                <span className="text-muted-foreground">المبلغ:</span>
+                <span className="font-mono font-semibold">{confirmData.amount} {confirmData.currencyCode}</span>
+              </div>
+              {confirmData.notes && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">ملاحظات:</span>
+                  <span className="text-end max-w-[60%]">{confirmData.notes}</span>
+                </div>
+              )}
+            </div>
+
+            {confirmData.commission && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-50/50 p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>عمولة الحوالة:</span>
+                  <span className="font-mono font-semibold">{confirmData.commission.totalCommission}</span>
+                </div>
+                <div className="flex justify-between border-t border-emerald-500/20 pt-2 text-sm">
+                  <span className="font-semibold">المبلغ الإجمالي:</span>
+                  <span className="font-mono font-bold">{confirmData.commission.totalAmount}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <DialogClose asChild>
+            <Button variant="outline" disabled={isLoading}>
+              إلغاء
+            </Button>
+          </DialogClose>
+          <Button
+            onClick={handleConfirmSend}
+            disabled={isLoading}
+            className="bg-gradient-to-r from-primary to-emerald-600 hover:to-emerald-700"
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>جاري الإرسال...</span>
+              </div>
+            ) : (
+              <span>تأكيد الإرسال</span>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
