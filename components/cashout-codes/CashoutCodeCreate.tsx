@@ -13,7 +13,7 @@ import { Eye, ArrowLeft } from "lucide-react"
 import { apiClient } from "@/lib/api"
 
 function validateMobile(mobile: string): string | null {
-  if (!/^05\d{8}$/.test(mobile)) return "رقم الجوال غير صحيح. يجب أن يبدأ بـ 05 ويتكون من 10 أرقام"
+  if (!/^7\d{8}$/.test(mobile)) return "رقم الجوال غير صحيح. يجب أن يبدأ بـ 7 ويتكون من 9 أرقام"
   return null
 }
 
@@ -105,7 +105,7 @@ export function CashoutCodeCreate() {
                     <Input
                       id="mobile"
                       type="tel"
-                      placeholder="05XXXXXXXX"
+                      placeholder="7XXXXXXXX"
                       value={mobile}
                       onChange={(e) => {
                         setMobile(e.target.value)

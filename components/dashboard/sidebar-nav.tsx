@@ -14,6 +14,7 @@ import {
   ArrowRight,
   List,
   Plus,
+  UserPlus,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -31,33 +32,43 @@ const NAV: Array<{ title: string; items: NavItem[] }> = [
     items: [{ href: "/dashboard", label: "لوحة التحكم", icon: LayoutDashboard }],
   },
   {
-    title: "العمليات الفردية",
+    title: " انشاء وتفعيل محفظة عميل",
     items: [
-      { href: "/dashboard/wallet-search", label: "تفعيل حساب محفظة", icon: Search },
+      { href: "/dashboard/wallet-create", label: "إنشاء محفظة", icon: UserPlus },
+      { href: "/dashboard/wallet-search", label: "تفعيل حساب محفظة", icon: Search }
+      
+     
+    ],
+  },
+  {
+    title: "عمليات الايداع والتحويل",
+    items: [
+      
       { href: "/dashboard/deposit", label: "إيداع نقدي", icon: Wallet },
       { href: "/dashboard/remittance", label: "حوالة الى حساب", icon: ArrowRightLeft },
       { href: "/dashboard/remittance-search", label: "دفع حوالة", icon: Search },
-      { href: "/dashboard/transactions", label: "كشف حساب", icon: Coins },
+    
     ],
   },
-  {
-    title: "العمليات الجماعية",
-    items: [
-      { href: "/dashboard/deposit/bulk", label: "إيداع جماعي", icon: Upload },
-      { href: "/dashboard/remittance/bulk", label: "حوالة جماعية", icon: ArrowRight },
-    ],
-  },
+  // {
+  //   title: "العمليات الجماعية",
+  //   items: [
+  //     { href: "/dashboard/deposit/bulk", label: "إيداع جماعي", icon: Upload },
+  //     { href: "/dashboard/remittance/bulk", label: "حوالة جماعية", icon: ArrowRight },
+  //   ],
+  // },
   {
     title: "أكواد السحب النقدي",
     items: [
-      { href: "/dashboard/cashout-codes", label: "قائمة الأكواد", icon: List },
+      { href: "/dashboard/cashout-codes", label: "الاكواد المدفوعة", icon: List },
       { href: "/dashboard/cashout-codes/search", label: "بحث عن كود", icon: Search },
       { href: "/dashboard/cashout-codes/create", label: "إنشاء كود جديد", icon: Plus },
     ],
   },
   {
     title: "الحساب",
-    items: [{ href: "/dashboard/account", label: "حسابي", icon: UserRound }],
+    items: [  { href: "/dashboard/transactions", label: "كشف حساب", icon: Coins },
+      { href: "/dashboard/account", label: "حسابي", icon: UserRound }],
   },
 ]
 

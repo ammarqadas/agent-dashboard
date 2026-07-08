@@ -158,6 +158,14 @@ class ApiClient {
     return response
   }
 
+  // Create wallet (agent)
+  async createWallet(data: { name: string; mobile: string; password?: string; address?: string }) {
+    return this.request('/agent/create-wallet', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
   // Wallet search by mobile
   async searchWalletByMobile(mobile: string) {
     return this.request(`/agent/wallet-search?mobile=${encodeURIComponent(mobile)}`)

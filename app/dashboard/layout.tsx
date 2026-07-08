@@ -18,6 +18,7 @@ const routeTitles: Record<string, string> = {
   "/dashboard/cashout-codes": "قائمة أكواد السحب",
   "/dashboard/cashout-codes/search": "بحث عن كود سحب",
   "/dashboard/cashout-codes/create": "إنشاء كود سحب",
+  "/dashboard/wallet-create": "إنشاء محفظة جديدة",
   "/dashboard/transactions": "كشف حساب",
   "/dashboard/remittance-search": "بحث ودفع حوالة",
   "/dashboard/account": "حسابي",

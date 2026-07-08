@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
-import { Search, Wallet, Coins, Receipt, User, ArrowLeft, ArrowRightLeft, TrendingUp, CreditCard } from "lucide-react"
+import { Search, Wallet, Coins, Receipt, User, ArrowLeft, ArrowRightLeft, TrendingUp, CreditCard, UserPlus } from "lucide-react"
 
 const quickActions = [
   {
@@ -8,6 +8,12 @@ const quickActions = [
     description: "بحث برقم الموبايل وتفعيل حساب المحفظة",
     icon: Search,
     href: "/dashboard/wallet-search",
+  },
+  {
+    title: "إنشاء محفظة",
+    description: "إنشاء محفظة جديدة للعميل",
+    icon: UserPlus,
+    href: "/dashboard/wallet-create",
   },
   {
     title: "إيداع نقدي",
@@ -78,7 +84,7 @@ export default function DashboardPage() {
       {/* Quick Actions Grid - minimal */}
       <div>
         <h2 className="section-title mb-3">إجراءات سريعة</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {quickActions.map((action) => (
             <Link key={action.href} href={action.href}>
               <Card className="group card-hover h-full cursor-pointer rounded-xl border border-border/60">

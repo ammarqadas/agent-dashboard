@@ -237,10 +237,10 @@
 
   /* Form utilities - minimal */
   .form-section {
-    @apply rounded-xl border border-border/60 bg-card p-5;
+    @apply rounded-xl border border-border/60 bg-primary/5 p-5;
   }
   .form-section-title {
-    @apply text-sm font-semibold text-muted-foreground mb-4 flex items-center gap-2;
+    @apply text-sm font-extrabold text-foreground mb-4 flex items-center gap-2 whitespace-nowrap;
   }
   .form-field {
     @apply space-y-2;

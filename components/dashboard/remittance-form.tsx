@@ -22,7 +22,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { CheckCircle2, XCircle, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle } from "lucide-react"
+import { CheckCircle2, XCircle, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle, RotateCcw, FileText } from "lucide-react"
 import { apiClient } from "@/lib/api"
 
 export function RemittanceForm() {
@@ -44,6 +44,11 @@ export function RemittanceForm() {
   const [success, setSuccess] = useState<any>(null)
   const [isFetchingCommission, setIsFetchingCommission] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
+  const [commissionResult, setCommissionResult] = useState<{
+    totalCommission: number
+    totalAmount: number
+    searchToken: string
+  } | null>(null)
   const [confirmData, setConfirmData] = useState<{
     senderName: string
     senderMobile: string
@@ -90,9 +95,33 @@ export function RemittanceForm() {
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+    if (error) setError("")
+    if (['amount', 'currency', 'distWallet'].includes(field)) {
+      setCommissionResult(null)
+    }
   }
 
   const requiresCommission = !!formData.distWallet
+
+  const selectedCurrency = currencies.find(c => String(c.id) === formData.currency)
+  const selectedNetwork = distWallets.find(w => w.key === formData.distWallet)
+
+  const handleReset = () => {
+    setFormData({
+      senderName: '',
+      senderMobile: '',
+      receiverName: '',
+      receiverMobile: '',
+      amount: '',
+      currency: '',
+      distWallet: '',
+      notes: ''
+    })
+    setSuccess(null)
+    setError("")
+    setCommissionResult(null)
+    setConfirmData(null)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -114,10 +143,9 @@ export function RemittanceForm() {
         return
       }
 
-      const selectedCurrency = currencies.find(c => String(c.id) === formData.currency)
       const currencyCode = selectedCurrency?.code || 'YER'
 
-      let commissionData: {
+      let commission: {
         totalCommission: number
         totalAmount: number
         searchToken: string
@@ -132,11 +160,12 @@ export function RemittanceForm() {
             amount: amountNum,
           })
           if (response.success) {
-            commissionData = {
+            commission = {
               totalCommission: response.totalCommission ?? response.CenterCommission ?? 0,
               totalAmount: response.totalAmount ?? amountNum,
               searchToken: response.searchToken,
             }
+            setCommissionResult(commission)
           } else {
             setError(response.message || 'فشل احتساب العمولة')
             setIsLoading(false)
@@ -162,7 +191,7 @@ export function RemittanceForm() {
         currencyCode,
         notes: formData.notes || undefined,
         distWallet: formData.distWallet || undefined,
-        commission: commissionData || undefined,
+        commission: commission || undefined,
       })
       setShowDialog(true)
     } catch (err: any) {
@@ -196,23 +225,13 @@ export function RemittanceForm() {
 
       if (response.success) {
         setSuccess(response.data)
-        setFormData({
-          senderName: '',
-          senderMobile: '',
-          receiverName: '',
-          receiverMobile: '',
-          amount: '',
-          currency: '',
-          distWallet: '',
-          notes: ''
-        })
         setConfirmData(null)
         setShowDialog(false)
+        setCommissionResult(null)
       } else {
         setError(response.message || "فشل في إرسال الحوالة")
         setShowDialog(false)
       }
-
     } catch (err: any) {
       setError(err.message || "حدث خطأ غير متوقع")
       setShowDialog(false)
@@ -223,299 +242,447 @@ export function RemittanceForm() {
 
   return (
     <>
-    <Card className="rounded-xl border border-border/60">
-      <CardHeader className="pb-4">
-        <div className="flex items-center gap-3">
-          <div className="icon-container">
-            <ArrowRightLeft className="h-5 w-5" />
-          </div>
-          <div>
-            <CardTitle className="text-lg">حوالة الى حساب </CardTitle>
-            <CardDescription>
-              حوالة الى حساب  مالية من خلال حساب الوكيل
-            </CardDescription>
-          </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Left: Main Form / Success Result */}
+        <div className="lg:col-span-2">
+          {success ? (
+            <Card className="rounded-xl border border-border/60">
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="icon-container bg-emerald-500/10 text-emerald-600">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">تم إرسال الحوالة بنجاح</CardTitle>
+                    <CardDescription>تفاصيل الحوالة</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  {success.transactionId && (
+                    <div className="dash-stat-card">
+                      <div className="text-xs text-muted-foreground mb-1">رقم العملية</div>
+                      <div className="text-lg font-bold font-mono">{success.transactionId}</div>
+                    </div>
+                  )}
+                  {success.expressid && (
+                    <div className="dash-stat-card">
+                      <div className="text-xs text-muted-foreground mb-1">رقم الحوالة</div>
+                      <div className="text-lg font-bold font-mono">{success.expressid}</div>
+                    </div>
+                  )}
+                  <div className="dash-stat-card">
+                    <div className="text-xs text-muted-foreground mb-1">المبلغ</div>
+                    <div className="text-lg font-bold font-mono">
+                      {success.amount?.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">{success.currency}</span>
+                    </div>
+                  </div>
+                  <div className="dash-stat-card border-emerald-500/20 bg-emerald-50/50">
+                    <div className="text-xs text-muted-foreground mb-1">الحالة</div>
+                    <div className="text-lg font-bold text-emerald-600 font-medium">مكتملة</div>
+                  </div>
+                </div>
+                <Button onClick={handleReset} variant="outline" className="w-full h-11 font-semibold">
+                  <div className="flex items-center gap-2">
+                    <RotateCcw className="h-4 w-4" />
+                    <span>إرسال حوالة جديدة</span>
+                  </div>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="rounded-xl border border-border/60">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-3">
+                <div className="icon-container">
+                  <ArrowRightLeft className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">حوالة الى حساب</CardTitle>
+                  <CardDescription>
+                    حوالة مالية من خلال حساب الوكيل
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-5">
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Sender Details */}
+                <div className="form-section space-y-4">
+                  <Label className="form-section-title">
+                    <User className="h-4 w-4" />
+                    بيانات المرسل
+                  </Label>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="form-field">
+                      <Label htmlFor="senderName" className="text-sm font-medium">اسم المرسل</Label>
+                      <div className="input-icon-wrapper">
+                        <User className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                        <Input
+                          id="senderName"
+                          placeholder="الاسم الثلاثي"
+                          value={formData.senderName}
+                          onChange={(e) => handleChange('senderName', e.target.value)}
+                          required
+                          className="pr-10"
+                        />
+                      </div>
+                    </div>
+                    <div className="form-field">
+                      <Label htmlFor="senderMobile" className="text-sm font-medium">جوال المرسل</Label>
+                      <div className="input-icon-wrapper">
+                        <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                        <Input
+                          id="senderMobile"
+                          type="tel"
+                          dir="ltr"
+                          placeholder="7xxxxxxxx"
+                          value={formData.senderMobile}
+                          onChange={(e) => handleChange('senderMobile', e.target.value)}
+                          required
+                          className="pr-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Receiver Details */}
+                <div className="form-section space-y-4">
+                  <Label className="form-section-title">
+                    <User className="h-4 w-4" />
+                    بيانات المستلم
+                  </Label>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="form-field">
+                      <Label htmlFor="receiverName" className="text-sm font-medium">اسم المستلم</Label>
+                      <div className="input-icon-wrapper">
+                        <User className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                        <Input
+                          id="receiverName"
+                          placeholder="الاسم الثلاثي"
+                          value={formData.receiverName}
+                          onChange={(e) => handleChange('receiverName', e.target.value)}
+                          required
+                          className="pr-10"
+                        />
+                      </div>
+                    </div>
+                    <div className="form-field">
+                      <Label htmlFor="receiverMobile" className="text-sm font-medium">جوال المستلم</Label>
+                      <div className="input-icon-wrapper">
+                        <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                        <Input
+                          id="receiverMobile"
+                          type="tel"
+                          dir="ltr"
+                          placeholder="7xxxxxxxx"
+                          value={formData.receiverMobile}
+                          onChange={(e) => handleChange('receiverMobile', e.target.value)}
+                          required
+                          className="pr-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Remittance Details */}
+                <div className="form-section space-y-4">
+                  <Label className="form-section-title">
+                    <Coins className="h-4 w-4" />
+                    بيانات الحوالة
+                  </Label>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="form-field">
+                      <Label htmlFor="amount" className="text-sm font-medium">المبلغ</Label>
+                      <div className="input-icon-wrapper">
+                        <Coins className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                        <Input
+                          id="amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          dir="ltr"
+                          placeholder="0.00"
+                          value={formData.amount}
+                          onChange={(e) => handleChange('amount', e.target.value)}
+                          required
+                          className="pr-10 font-semibold"
+                        />
+                      </div>
+                    </div>
+                    <div className="form-field">
+                      <Label htmlFor="currency" className="text-sm font-medium">العملة</Label>
+                      <Select value={formData.currency} onValueChange={(v) => handleChange('currency', v)} required>
+                        <SelectTrigger className="text-right [&>span]:text-right">
+                          <SelectValue placeholder="اختر العملة" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {currencies.map((curr) => (
+                            <SelectItem key={curr.id} value={String(curr.id)} className="text-right">
+                              {curr.code} - {curr.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="form-field">
+                      <Label htmlFor="distWallet" className="text-sm font-medium">تحويل عبر شبكة</Label>
+                      <Select value={formData.distWallet} onValueChange={(v) => handleChange('distWallet', v)}>
+                        <SelectTrigger className="text-right [&>span]:text-right">
+                          <SelectValue placeholder="اختر الشبكة" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {distWallets.map((wallet) => (
+                            <SelectItem key={wallet.key} value={wallet.key} className="text-right">
+                              {wallet.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="form-field md:col-span-2">
+                      <Label htmlFor="notes" className="text-sm font-medium">ملاحظات (اختياري)</Label>
+                      <Input
+                        id="notes"
+                        placeholder="غرض التحويل..."
+                        value={formData.notes}
+                        onChange={(e) => handleChange('notes', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Error Alert */}
+                {error && (
+                  <Alert variant="destructive" className="rounded-xl">
+                    <XCircle className="h-4 w-4" />
+                    <div className="font-medium">{error}</div>
+                  </Alert>
+                )}
+
+                {/* Submit Button */}
+                <Button
+                  type="submit"
+                  disabled={isLoading || isFetchingCommission}
+                  className="w-full h-11 font-semibold"
+                >
+                  {(isLoading || isFetchingCommission) ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>{isFetchingCommission ? 'جاري احتساب العمولة...' : 'جاري التجهيز...'}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <ArrowRightLeft className="h-4 w-4" />
+                      <span>إرسال الحوالة</span>
+                    </div>
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+          )}
         </div>
-      </CardHeader>
 
-      <CardContent className="space-y-5">
-        <form onSubmit={handleSubmit} className="space-y-5">
-
-          {/* Sender Details - minimal */}
-          <div className="form-section space-y-4">
-            <Label className="form-section-title">
-              <User className="h-4 w-4" />
-              بيانات المرسل
-            </Label>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="form-field">
-                <Label htmlFor="senderName" className="text-sm font-medium">اسم المرسل</Label>
-                <Input
-                  id="senderName"
-                  placeholder="الاسم الثلاثي"
-                  value={formData.senderName}
-                  onChange={(e) => handleChange('senderName', e.target.value)}
-                  required
-                />
-              </div>
-              <div className="form-field">
-                <Label htmlFor="senderMobile" className="text-sm font-medium">جوال المرسل</Label>
-                <div className="input-icon-wrapper">
-                  <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
-                  <Input
-                    id="senderMobile"
-                    type="tel"
-                    dir="ltr"
-                    placeholder="7xxxxxxxx"
-                    value={formData.senderMobile}
-                    onChange={(e) => handleChange('senderMobile', e.target.value)}
-                    required
-                    className="pr-10"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Receiver Details - minimal */}
-          <div className="form-section space-y-4">
-            <Label className="form-section-title">
-              <User className="h-4 w-4" />
-              بيانات المستلم
-            </Label>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="form-field">
-                <Label htmlFor="receiverName" className="text-sm font-medium">اسم المستلم</Label>
-                <Input
-                  id="receiverName"
-                  placeholder="الاسم الثلاثي"
-                  value={formData.receiverName}
-                  onChange={(e) => handleChange('receiverName', e.target.value)}
-                  required
-                />
-              </div>
-              <div className="form-field">
-                <Label htmlFor="receiverMobile" className="text-sm font-medium">جوال المستلم</Label>
-                <div className="input-icon-wrapper">
-                  <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
-                  <Input
-                    id="receiverMobile"
-                    type="tel"
-                    dir="ltr"
-                    placeholder="7xxxxxxxx"
-                    value={formData.receiverMobile}
-                    onChange={(e) => handleChange('receiverMobile', e.target.value)}
-                    required
-                    className="pr-10"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Amount Details - minimal */}
-          <div className="form-section space-y-4">
-            <Label className="form-section-title">
-              <Coins className="h-4 w-4" />
-              بيانات الحوالة
-            </Label>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="form-field">
-                <Label htmlFor="amount" className="text-sm font-medium">المبلغ</Label>
-                <div className="input-icon-wrapper">
-                  <Coins className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
-                  <Input
-                    id="amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    dir="ltr"
-                    placeholder="0.00"
-                    value={formData.amount}
-                    onChange={(e) => handleChange('amount', e.target.value)}
-                    required
-                    className="pr-10 font-semibold"
-                  />
-                </div>
-              </div>
-              <div className="form-field">
-                <Label htmlFor="currency" className="text-sm font-medium">العملة</Label>
-                <Select value={formData.currency} onValueChange={(v) => handleChange('currency', v)} required>
-                  <SelectTrigger className="text-right [&>span]:text-right">
-                    <SelectValue placeholder="اختر العملة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((curr) => (
-                      <SelectItem key={curr.id} value={String(curr.id)} className="text-right">
-                        {curr.code} - {curr.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="form-field">
-                <Label htmlFor="distWallet" className="text-sm font-medium">تحويل عبر شبكة</Label>
-                <Select value={formData.distWallet} onValueChange={(v) => handleChange('distWallet', v)}>
-                  <SelectTrigger className="text-right [&>span]:text-right">
-                    <SelectValue placeholder="اختر الشبكة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {distWallets.map((wallet) => (
-                      <SelectItem key={wallet.key} value={wallet.key} className="text-right">
-                        {wallet.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="form-field md:col-span-2">
-                <Label htmlFor="notes" className="text-sm font-medium">ملاحظات (اختياري)</Label>
-                <Input
-                  id="notes"
-                  placeholder="غرض التحويل..."
-                  value={formData.notes}
-                  onChange={(e) => handleChange('notes', e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Error Alert */}
-          {error && (
-            <Alert variant="destructive" className="rounded-xl">
-              <XCircle className="h-4 w-4" />
-              <div className="font-medium">{error}</div>
-            </Alert>
-          )}
-
-          {/* Success Alert */}
-          {success && (
-            <Alert className="rounded-xl border-emerald-500/50 bg-emerald-50">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <div className="text-emerald-800">
-                <div className="font-semibold mb-2">تم إرسال الحوالة بنجاح!</div>
-                <div className="text-sm space-y-1">
-                  <div className="flex justify-between border-b border-emerald-500/20 pb-1">
-                    <span>رقم العملية:</span>
-                    <span className="font-mono font-semibold">{success.transactionId}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-emerald-500/20 pb-1">
-                    <span>رقم الحوالة:</span>
-                    <span className="font-mono font-semibold">{success.expressid}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>المبلغ:</span>
-                    <span className="font-semibold">{success.amount} {success.currency}</span>
-                  </div>
-                </div>
-              </div>
-            </Alert>
-          )}
-
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            disabled={isLoading || isFetchingCommission}
-            className="w-full h-11 font-semibold"
-          >
-            {(isLoading || isFetchingCommission) ? (
-              <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>{isFetchingCommission ? 'جاري احتساب العمولة...' : 'جاري التجهيز...'}</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
+        {/* Right: Preview Sidebar */}
+        <div className="lg:col-span-1">
+          <Card className="rounded-xl border border-border/60 lg:sticky lg:top-24">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-sm flex items-center gap-2">
                 <ArrowRightLeft className="h-4 w-4" />
-                <span>إرسال الحوالة</span>
-              </div>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+                {success ? "تمت العملية" : "ملخص الحوالة"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {success ? (
+                <div className="space-y-4">
+                  <div className="text-center py-2">
+                    <div className="icon-container bg-emerald-500/10 text-emerald-600 mx-auto mb-2">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <p className="text-sm font-bold text-emerald-600">تمت العملية بنجاح</p>
+                  </div>
+                  <div className="space-y-3">
+                    {success.transactionId && (
+                      <div>
+                        <span className="text-xs text-muted-foreground">رقم العملية</span>
+                        <p className="font-mono text-sm font-bold">{success.transactionId}</p>
+                      </div>
+                    )}
+                    {success.expressid && (
+                      <div>
+                        <span className="text-xs text-muted-foreground">رقم الحوالة</span>
+                        <p className="font-mono text-sm font-bold">{success.expressid}</p>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-xs text-muted-foreground">المبلغ</span>
+                      <p className="font-mono text-lg font-bold" dir="ltr">{success.amount?.toLocaleString()} {success.currency}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Sender */}
+                  <div>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <User className="h-3 w-3" /> المرسل
+                    </span>
+                    <p className="text-sm font-medium mt-0.5">{formData.senderName || "—"}</p>
+                    {formData.senderMobile && (
+                      <p className="font-mono text-xs mt-0.5" dir="ltr">{formData.senderMobile}</p>
+                    )}
+                  </div>
 
-    {/* Confirmation Dialog */}
-    <Dialog open={showDialog} onOpenChange={setShowDialog}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            تأكيد إرسال الحوالة
-          </DialogTitle>
-          <DialogDescription>
-            راجع بيانات الحوالة قبل الإرسال
-          </DialogDescription>
-        </DialogHeader>
+                  {/* Receiver */}
+                  <div>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <User className="h-3 w-3" /> المستلم
+                    </span>
+                    <p className="text-sm font-medium mt-0.5">{formData.receiverName || "—"}</p>
+                    {formData.receiverMobile && (
+                      <p className="font-mono text-xs mt-0.5" dir="ltr">{formData.receiverMobile}</p>
+                    )}
+                  </div>
 
-        {confirmData && (
-          <div className="space-y-4 text-sm">
-            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">المرسل:</span>
-                <span className="font-medium">{confirmData.senderName}</span>
+                  {/* Amount */}
+                  <div>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Coins className="h-3 w-3" /> المبلغ
+                    </span>
+                    <p className="text-lg font-bold font-mono mt-0.5" dir="ltr">
+                      {formData.amount
+                        ? `${parseFloat(formData.amount).toLocaleString("en-US")} ${selectedCurrency?.code || ''}`
+                        : "—"}
+                    </p>
+                  </div>
+
+                  {/* Network */}
+                  {formData.distWallet && (
+                    <div>
+                      <span className="text-xs text-muted-foreground">تحويل عبر</span>
+                      <p className="text-sm mt-0.5">{selectedNetwork?.name || formData.distWallet}</p>
+                    </div>
+                  )}
+
+                  {/* Commission (when available) */}
+                  {commissionResult && (
+                    <div className="pt-3 border-t">
+                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-50/50 p-3 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">عمولة التحويل</span>
+                          <span className="font-mono font-semibold">{commissionResult.totalCommission}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-emerald-500/20 pt-2 text-sm">
+                          <span className="font-semibold">المبلغ الإجمالي</span>
+                          <span className="font-mono font-bold">{commissionResult.totalAmount} {selectedCurrency?.code}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Commission loading */}
+                  {isFetchingCommission && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>جاري احتساب العمولة...</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              تأكيد إرسال الحوالة
+            </DialogTitle>
+            <DialogDescription>
+              راجع بيانات الحوالة قبل الإرسال
+            </DialogDescription>
+          </DialogHeader>
+
+          {confirmData && (
+            <div className="space-y-3">
+              <div className="space-y-3">
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                    <User className="h-3.5 w-3.5" /> المرسل
+                  </div>
+                  <div className="font-medium">{confirmData.senderName}</div>
+                  <div className="font-mono text-xs" dir="ltr">{confirmData.senderMobile}</div>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                    <User className="h-3.5 w-3.5" /> المستلم
+                  </div>
+                  <div className="font-medium">{confirmData.receiverName}</div>
+                  <div className="font-mono text-xs" dir="ltr">{confirmData.receiverMobile}</div>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">جوال المرسل:</span>
-                <span className="font-mono" dir="ltr">{confirmData.senderMobile}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">المستلم:</span>
-                <span className="font-medium">{confirmData.receiverName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">جوال المستلم:</span>
-                <span className="font-mono" dir="ltr">{confirmData.receiverMobile}</span>
-              </div>
-              <div className="flex justify-between border-t border-border/50 pt-2">
-                <span className="text-muted-foreground">المبلغ:</span>
-                <span className="font-mono font-semibold">{confirmData.amount} {confirmData.currencyCode}</span>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground mb-1">
+                  <Coins className="h-3.5 w-3.5" /> المبلغ
+                </div>
+                <div className="font-mono font-bold text-lg">{confirmData.amount} {confirmData.currencyCode}</div>
               </div>
               {confirmData.notes && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">ملاحظات:</span>
-                  <span className="text-end max-w-[60%]">{confirmData.notes}</span>
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground mb-1">
+                    <FileText className="h-3.5 w-3.5" /> ملاحظات
+                  </div>
+                  <div className="text-sm">{confirmData.notes}</div>
+                </div>
+              )}
+
+              {confirmData.commission && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-50/50 p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">عمولة الحوالة</span>
+                    <span className="font-mono font-semibold">{confirmData.commission.totalCommission}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-emerald-500/20 pt-2 text-sm">
+                    <span className="font-semibold">المبلغ الإجمالي</span>
+                    <span className="font-mono font-bold">{confirmData.commission.totalAmount} {confirmData.currencyCode}</span>
+                  </div>
                 </div>
               )}
             </div>
+          )}
 
-            {confirmData.commission && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-50/50 p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>عمولة الحوالة:</span>
-                  <span className="font-mono font-semibold">{confirmData.commission.totalCommission}</span>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isLoading}>
+                إلغاء
+              </Button>
+            </DialogClose>
+            <Button
+              onClick={handleConfirmSend}
+              disabled={isLoading}
+              className="bg-gradient-to-r from-primary to-emerald-600 hover:to-emerald-700"
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>جاري الإرسال...</span>
                 </div>
-                <div className="flex justify-between border-t border-emerald-500/20 pt-2 text-sm">
-                  <span className="font-semibold">المبلغ الإجمالي:</span>
-                  <span className="font-mono font-bold">{confirmData.commission.totalAmount}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <DialogFooter className="gap-2 sm:gap-0">
-          <DialogClose asChild>
-            <Button variant="outline" disabled={isLoading}>
-              إلغاء
+              ) : (
+                <span>تأكيد الإرسال</span>
+              )}
             </Button>
-          </DialogClose>
-          <Button
-            onClick={handleConfirmSend}
-            disabled={isLoading}
-            className="bg-gradient-to-r from-primary to-emerald-600 hover:to-emerald-700"
-          >
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>جاري الإرسال...</span>
-              </div>
-            ) : (
-              <span>تأكيد الإرسال</span>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
