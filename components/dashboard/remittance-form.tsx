@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -22,7 +22,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { CheckCircle2, XCircle, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle, RotateCcw, FileText } from "lucide-react"
+import { CheckCircle2, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle, RotateCcw, FileText, Send, X } from "lucide-react"
+import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
 
 export function RemittanceForm() {
@@ -40,10 +41,12 @@ export function RemittanceForm() {
   const [currencies, setCurrencies] = useState<any[]>([])
   const [distWallets, setDistWallets] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
   const [success, setSuccess] = useState<any>(null)
+  const [successDismissed, setSuccessDismissed] = useState(false)
   const [isFetchingCommission, setIsFetchingCommission] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
+  const [isCurrenciesLoading, setIsCurrenciesLoading] = useState(true)
+  const [isDistWalletsLoading, setIsDistWalletsLoading] = useState(true)
   const [commissionResult, setCommissionResult] = useState<{
     totalCommission: number
     totalAmount: number
@@ -65,8 +68,16 @@ export function RemittanceForm() {
     }
   } | null>(null)
 
+  const normalizeMobile = (mob: string) => {
+    if (!mob) return mob
+    const clean = mob.replace(/^\+?966/, "").replace(/^0/, "")
+    if (/^7\d{8}$/.test(clean)) return clean
+    return mob
+  }
+
   useEffect(() => {
     const fetchCurrencies = async () => {
+      setIsCurrenciesLoading(true)
       try {
         const response = await apiClient.getCurrencies()
         if (response.success && response.docs) {
@@ -74,6 +85,8 @@ export function RemittanceForm() {
         }
       } catch (err) {
         console.error("Failed to fetch currencies:", err)
+      } finally {
+        setIsCurrenciesLoading(false)
       }
     }
     fetchCurrencies()
@@ -81,6 +94,7 @@ export function RemittanceForm() {
 
   useEffect(() => {
     const fetchDistWallets = async () => {
+      setIsDistWalletsLoading(true)
       try {
         const response = await apiClient.getDistWallets()
         if (response.success && response.docs) {
@@ -88,6 +102,8 @@ export function RemittanceForm() {
         }
       } catch (err) {
         console.error("Failed to fetch distribution wallets:", err)
+      } finally {
+        setIsDistWalletsLoading(false)
       }
     }
     fetchDistWallets()
@@ -95,7 +111,6 @@ export function RemittanceForm() {
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
-    if (error) setError("")
     if (['amount', 'currency', 'distWallet'].includes(field)) {
       setCommissionResult(null)
     }
@@ -118,27 +133,27 @@ export function RemittanceForm() {
       notes: ''
     })
     setSuccess(null)
-    setError("")
+    setSuccessDismissed(false)
     setCommissionResult(null)
     setConfirmData(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError("")
     setSuccess(null)
+    setSuccessDismissed(false)
     setIsLoading(true)
 
     try {
       const amountNum = parseFloat(formData.amount)
       if (isNaN(amountNum) || amountNum <= 0) {
-        setError("الرجاء إدخال مبلغ صحيح")
+        toast.error("الرجاء إدخال مبلغ صحيح")
         setIsLoading(false)
         return
       }
 
       if (!formData.currency) {
-        setError("الرجاء اختيار العملة")
+        toast.error("الرجاء اختيار العملة")
         setIsLoading(false)
         return
       }
@@ -167,13 +182,13 @@ export function RemittanceForm() {
             }
             setCommissionResult(commission)
           } else {
-            setError(response.message || 'فشل احتساب العمولة')
+            toast.error(response.message || 'فشل احتساب العمولة')
             setIsLoading(false)
             setIsFetchingCommission(false)
             return
           }
         } catch (err: any) {
-          setError(err.message || 'حدث خطأ أثناء احتساب العمولة')
+          toast.error(err.message || 'حدث خطأ أثناء احتساب العمولة')
           setIsLoading(false)
           setIsFetchingCommission(false)
           return
@@ -195,7 +210,7 @@ export function RemittanceForm() {
       })
       setShowDialog(true)
     } catch (err: any) {
-      setError(err.message || "حدث خطأ غير متوقع")
+      toast.error(err.message || "حدث خطأ غير متوقع")
     } finally {
       setIsLoading(false)
     }
@@ -203,8 +218,8 @@ export function RemittanceForm() {
 
   const handleConfirmSend = async () => {
     if (!confirmData) return
-    setError("")
     setSuccess(null)
+    setSuccessDismissed(false)
     setIsLoading(true)
 
     try {
@@ -228,12 +243,13 @@ export function RemittanceForm() {
         setConfirmData(null)
         setShowDialog(false)
         setCommissionResult(null)
+        setTimeout(() => setSuccessDismissed(true), 8000)
       } else {
-        setError(response.message || "فشل في إرسال الحوالة")
+        toast.error(response.message || "فشل في إرسال الحوالة")
         setShowDialog(false)
       }
     } catch (err: any) {
-      setError(err.message || "حدث خطأ غير متوقع")
+      toast.error(err.message || "حدث خطأ غير متوقع")
       setShowDialog(false)
     } finally {
       setIsLoading(false)
@@ -247,7 +263,7 @@ export function RemittanceForm() {
         <div className="lg:col-span-2">
           {success ? (
             <Card className="rounded-xl border border-border/60">
-              <CardHeader className="pb-4">
+              <CardHeader className="pb-5 border-b border-border/40">
                 <div className="flex items-center gap-3">
                   <div className="icon-container bg-emerald-500/10 text-emerald-600">
                     <CheckCircle2 className="h-5 w-5" />
@@ -293,13 +309,16 @@ export function RemittanceForm() {
             </Card>
           ) : (
             <Card className="rounded-xl border border-border/60">
-            <CardHeader className="pb-4">
+            <CardHeader className="pb-5 border-b border-border/40 bg-gradient-to-br from-primary/5 via-primary/[0.08] to-transparent">
               <div className="flex items-center gap-3">
                 <div className="icon-container">
                   <ArrowRightLeft className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">حوالة الى حساب</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg">حوالة الى حساب</CardTitle>
+                    <Badge variant="secondary" className="text-xs">إرسال</Badge>
+                  </div>
                   <CardDescription>
                     حوالة مالية من خلال حساب الوكيل
                   </CardDescription>
@@ -418,7 +437,14 @@ export function RemittanceForm() {
                       <Label htmlFor="currency" className="text-sm font-medium">العملة</Label>
                       <Select value={formData.currency} onValueChange={(v) => handleChange('currency', v)} required>
                         <SelectTrigger className="text-right [&>span]:text-right">
-                          <SelectValue placeholder="اختر العملة" />
+                          {isCurrenciesLoading ? (
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <span>جاري التحميل...</span>
+                            </div>
+                          ) : (
+                            <SelectValue placeholder="اختر العملة" />
+                          )}
                         </SelectTrigger>
                         <SelectContent>
                           {currencies.map((curr) => (
@@ -428,12 +454,22 @@ export function RemittanceForm() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {!isCurrenciesLoading && currencies.length === 0 && (
+                        <p className="text-xs text-amber-600 mt-1">تعذر تحميل العملات. يرجى تحديث الصفحة.</p>
+                      )}
                     </div>
                     <div className="form-field">
                       <Label htmlFor="distWallet" className="text-sm font-medium">تحويل عبر شبكة</Label>
                       <Select value={formData.distWallet} onValueChange={(v) => handleChange('distWallet', v)}>
                         <SelectTrigger className="text-right [&>span]:text-right">
-                          <SelectValue placeholder="اختر الشبكة" />
+                          {isDistWalletsLoading ? (
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <span>جاري التحميل...</span>
+                            </div>
+                          ) : (
+                            <SelectValue placeholder="اختر الشبكة" />
+                          )}
                         </SelectTrigger>
                         <SelectContent>
                           {distWallets.map((wallet) => (
@@ -446,23 +482,17 @@ export function RemittanceForm() {
                     </div>
                     <div className="form-field md:col-span-2">
                       <Label htmlFor="notes" className="text-sm font-medium">ملاحظات (اختياري)</Label>
-                      <Input
+                      <textarea
                         id="notes"
+                        rows={2}
                         placeholder="غرض التحويل..."
                         value={formData.notes}
                         onChange={(e) => handleChange('notes', e.target.value)}
+                        className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       />
                     </div>
                   </div>
                 </div>
-
-                {/* Error Alert */}
-                {error && (
-                  <Alert variant="destructive" className="rounded-xl">
-                    <XCircle className="h-4 w-4" />
-                    <div className="font-medium">{error}</div>
-                  </Alert>
-                )}
 
                 {/* Submit Button */}
                 <Button
@@ -482,6 +512,54 @@ export function RemittanceForm() {
                     </div>
                   )}
                 </Button>
+
+                {/* Compact Success Card */}
+                {success && !successDismissed && (
+                  <div className="relative rounded-xl border border-emerald-500/40 bg-emerald-50 p-5 space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setSuccessDismissed(true)}
+                      className="absolute top-3 left-3 text-emerald-500 hover:text-emerald-700 transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                      <CheckCircle2 className="h-5 w-5" />
+                      <span>تم إرسال الحوالة بنجاح</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {success.transactionId && (
+                        <div className="space-y-0.5">
+                          <span className="text-xs text-muted-foreground">رقم العملية</span>
+                          <p className="font-mono font-bold">{success.transactionId}</p>
+                        </div>
+                      )}
+                      {success.expressid && (
+                        <div className="space-y-0.5">
+                          <span className="text-xs text-muted-foreground">رقم الحوالة</span>
+                          <p className="font-mono font-bold">{success.expressid}</p>
+                        </div>
+                      )}
+                      <div className="space-y-0.5">
+                        <span className="text-xs text-muted-foreground">المبلغ</span>
+                        <p className="font-mono font-bold">{success.amount?.toLocaleString()} {success.currency}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-xs text-muted-foreground">الحالة</span>
+                        <p className="font-medium text-emerald-600">مكتملة</p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleReset}
+                      variant="outline"
+                      className="w-full h-11 font-semibold"
+                    >
+                      <RotateCcw className="ml-2 h-4 w-4" />
+                      إرسال حوالة جديدة
+                    </Button>
+                  </div>
+                )}
               </form>
             </CardContent>
           </Card>
@@ -491,7 +569,7 @@ export function RemittanceForm() {
         {/* Right: Preview Sidebar */}
         <div className="lg:col-span-1">
           <Card className="rounded-xl border border-border/60 lg:sticky lg:top-24">
-            <CardHeader className="pb-4">
+            <CardHeader className="pb-5 border-b border-border/40">
               <CardTitle className="text-sm flex items-center gap-2">
                 <ArrowRightLeft className="h-4 w-4" />
                 {success ? "تمت العملية" : "ملخص الحوالة"}

@@ -7,26 +7,18 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { useCashoutCodeSearch, useCashoutCodePay } from "./useCashoutCodes"
 import { CashoutCodeStatusBadge } from "./CashoutCodeStatusBadge"
-import { SearchX, X, Clock, Search } from "lucide-react"
+import { SearchX, X, Loader2 } from "lucide-react"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import type { CashoutCode } from "./types"
-
-const HISTORY_KEY = "cashout-search-history"
-const MAX_HISTORY = 5
-
-function getHistory(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]")
-  } catch {
-    return []
-  }
-}
-
-function addToHistory(code: string) {
-  const history = getHistory().filter((h) => h !== code)
-  history.unshift(code)
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)))
-}
 
 function resolveCurrency(code: CashoutCode): string {
   if (!code.currency) return "—"
@@ -43,14 +35,13 @@ function resolveWallet(code: CashoutCode): string {
 
 export function CashoutCodeSearch() {
   const [code, setCode] = useState("")
-  const [history, setHistory] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const { result, isSearching, search, clearResult } = useCashoutCodeSearch()
   const { pay, isPaying } = useCashoutCodePay()
+  const [payDialogCode, setPayDialogCode] = useState<string | null>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
-    setHistory(getHistory())
   }, [])
 
   const handleSearch = useCallback(async (e: React.FormEvent) => {
@@ -59,35 +50,27 @@ export function CashoutCodeSearch() {
     if (!trimmed) return
     const found = await search(trimmed)
     if (found) {
-      addToHistory(trimmed)
-      setHistory(getHistory())
       toast.success("تم العثور على الكود", { description: `كود ${trimmed} موجود.` })
     } else {
       toast.error("غير موجود", { description: "كود السحب غير موجود" })
     }
   }, [code, search])
 
-  const handleHistoryClick = useCallback(async (item: string) => {
-    setCode(item)
-    const found = await search(item)
-    if (found) {
-      setHistory(getHistory())
-      toast.success("تم العثور على الكود", { description: `كود ${item} موجود.` })
-    } else {
-      toast.error("غير موجود", { description: "كود السحب غير موجود" })
-    }
-  }, [search])
-
   const handlePay = useCallback(async (codeValue: string) => {
-    if (!confirm("هل أنت متأكد من دفع كود السحب؟")) return
-    const result = await pay(codeValue)
+    setPayDialogCode(codeValue)
+  }, [])
+
+  const handleConfirmPay = useCallback(async () => {
+    if (!payDialogCode) return
+    const result = await pay(payDialogCode)
     if (result.success) {
       toast.success(result.message)
       handleSearch({ preventDefault: () => {} } as React.FormEvent)
     } else {
       toast.error(result.message)
     }
-  }, [pay, handleSearch])
+    setPayDialogCode(null)
+  }, [payDialogCode, pay, handleSearch])
 
   const handleClear = () => {
     setCode("")
@@ -101,10 +84,10 @@ export function CashoutCodeSearch() {
         <CardTitle>بحث عن كود سحب</CardTitle>
         <CardDescription>ابحث عن كود سحب باستخدام رقم الكود</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <form onSubmit={handleSearch} className="space-y-4">
-          <div className="rounded-lg border bg-muted/20 p-4">
-            <div className="space-y-2">
+      <CardContent className="space-y-3">
+        <form onSubmit={handleSearch} className="space-y-3">
+          <div className="flex gap-2 flex-col sm:flex-row">
+            <div className="flex-1 space-y-1.5">
               <Label htmlFor="code" className="text-right block">كود السحب</Label>
               <div className="relative">
                 <Input
@@ -118,7 +101,7 @@ export function CashoutCodeSearch() {
                     if (result) clearResult()
                   }}
                   dir="ltr"
-                  className="pl-8"
+                  className="pl-8 h-10"
                 />
                 {code && (
                   <button
@@ -131,72 +114,83 @@ export function CashoutCodeSearch() {
                 )}
               </div>
             </div>
-          </div>
-          <div className="flex justify-end">
-            <Button type="submit" disabled={isSearching || !code.trim()} className="min-w-40">
+            <Button type="submit" disabled={isSearching || !code.trim()} className="sm:self-end h-10 px-6">
               {isSearching ? "جاري البحث..." : "بحث"}
             </Button>
           </div>
         </form>
 
-        {history.length > 0 && !result && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>عمليات البحث السابقة</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {history.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => handleHistoryClick(item)}
-                  className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-3 py-1.5 text-sm font-mono text-foreground hover:bg-muted transition-colors"
-                >
-                  <Search className="h-3 w-3" />
-                  {item}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {result && (
-          <div className="rounded-lg border p-5 space-y-4">
-            <h3 className="font-semibold text-lg">تفاصيل الكود</h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <span className="text-sm text-muted-foreground">الكود</span>
-                <p className="font-mono font-medium">{result.code}</p>
+          <Card className="rounded-xl border overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">تفاصيل الكود</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="rounded-lg bg-muted/30 p-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">الكود</p>
+                  <p className="font-mono font-medium text-sm truncate">{result.code}</p>
+                </div>
+                <div className="rounded-lg bg-muted/30 p-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">المبلغ</p>
+                  <p className="font-medium text-sm">{result.amount}</p>
+                </div>
+                <div className="rounded-lg bg-muted/30 p-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">العملة</p>
+                  <p className="font-medium text-sm">{resolveCurrency(result)}</p>
+                </div>
+                <div className="rounded-lg bg-muted/30 p-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">الحالة</p>
+                  <CashoutCodeStatusBadge status={result.status} />
+                </div>
               </div>
-              <div>
-                <span className="text-sm text-muted-foreground">المبلغ</span>
-                <p className="font-medium">{result.amount}</p>
+              <div className="rounded-lg bg-primary/5 border border-primary/10 p-3.5">
+                <p className="text-xs text-muted-foreground mb-0.5">المحفظة</p>
+                <p className="font-medium text-sm">{resolveWallet(result)}</p>
               </div>
-              <div>
-                <span className="text-sm text-muted-foreground">العملة</span>
-                <p className="font-medium">{resolveCurrency(result)}</p>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground">الحالة</span>
-                <div className="mt-0.5"><CashoutCodeStatusBadge status={result.status} /></div>
-              </div>
-              <div className="sm:col-span-2">
-                <span className="text-sm text-muted-foreground">المحفظة</span>
-                <p className="font-medium">{resolveWallet(result)}</p>
-              </div>
-            </div>
-            {result.status === "pending" && (
-              <div className="flex justify-end pt-2 border-t">
-                <Button onClick={() => handlePay(result.code)} disabled={isPaying} className="min-w-32">
-                  {isPaying ? "جاري الدفع..." : "دفع الكود"}
+              {result.status === "pending" && (
+                <Button onClick={() => handlePay(result.code)} disabled={isPaying} className="w-full h-11">
+                  {isPaying ? (
+                    <>
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                      جاري الدفع...
+                    </>
+                  ) : "دفع الكود"}
                 </Button>
-              </div>
-            )}
-          </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
-        {!result && !isSearching && !code && history.length === 0 && (
+      <Dialog open={payDialogCode !== null} onOpenChange={() => setPayDialogCode(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>تأكيد دفع كود السحب</DialogTitle>
+            <DialogDescription>
+              هل أنت متأكد من دفع كود السحب؟
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-center text-sm text-muted-foreground mb-2">الكود</p>
+            <p className="text-center font-mono text-xl font-bold">{payDialogCode}</p>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">إلغاء</Button>
+            </DialogClose>
+            <Button onClick={handleConfirmPay} disabled={isPaying}>
+              {isPaying ? (
+                <>
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                  جاري الدفع...
+                </>
+              ) : "تأكيد الدفع"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+        {!result && !isSearching && !code && (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <div className="rounded-full bg-muted p-4">
               <SearchX className="h-8 w-8 text-muted-foreground" />

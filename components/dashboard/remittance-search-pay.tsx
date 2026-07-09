@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -28,11 +28,13 @@ import {
   Coins,
   Loader2,
   CheckCircle2,
-  XCircle,
   CreditCard,
   RotateCcw,
   Calendar,
+  X,
+  Send,
 } from "lucide-react"
+import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
 
 type SearchResult = {
@@ -57,7 +59,6 @@ function SearchRemittanceCard({
   selectedNetwork,
   remittanceId,
   isSearching,
-  error,
   searchResult,
   onNetworkChange,
   onRemittanceIdChange,
@@ -67,7 +68,6 @@ function SearchRemittanceCard({
   selectedNetwork: string
   remittanceId: string
   isSearching: boolean
-  error: string
   searchResult: SearchResult | null
   onNetworkChange: (v: string) => void
   onRemittanceIdChange: (v: string) => void
@@ -75,13 +75,16 @@ function SearchRemittanceCard({
 }) {
   return (
     <Card className="rounded-xl border border-border/60">
-      <CardHeader className="pb-4">
+      <CardHeader className="pb-5 border-b border-border/40 bg-gradient-to-br from-primary/5 via-primary/[0.08] to-transparent">
         <div className="flex items-center gap-3">
           <div className="icon-container">
             <Search className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle className="text-lg">بحث عن حوالة</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-lg">بحث عن حوالة</CardTitle>
+              <Badge variant="secondary" className="text-xs">بحث</Badge>
+            </div>
             <CardDescription>
               اختر الشبكة وأدخل رقم الحوالة للبحث
             </CardDescription>
@@ -96,7 +99,14 @@ function SearchRemittanceCard({
               <Label htmlFor="network" className="text-sm font-medium">الشبكة</Label>
               <Select value={selectedNetwork} onValueChange={onNetworkChange} disabled={!!searchResult}>
                 <SelectTrigger className="text-right [&>span]:text-right">
-                  <SelectValue placeholder="اختر الشبكة" />
+                  {networks.length === 0 ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>جاري التحميل...</span>
+                    </div>
+                  ) : (
+                    <SelectValue placeholder="اختر الشبكة" />
+                  )}
                 </SelectTrigger>
                 <SelectContent>
                   {networks.map((network) => (
@@ -124,13 +134,6 @@ function SearchRemittanceCard({
               </div>
             </div>
           </div>
-
-          {error && !searchResult && (
-            <Alert variant="destructive" className="rounded-xl">
-              <XCircle className="h-4 w-4" />
-              <div className="font-medium">{error}</div>
-            </Alert>
-          )}
 
           {!searchResult && (
             <Button
@@ -165,7 +168,6 @@ function RemittanceResultStep({
   idType,
   expdate,
   isPaying,
-  error,
   networks,
   onIdNumberChange,
   onIdTypeChange,
@@ -178,7 +180,6 @@ function RemittanceResultStep({
   idType: "national" | "passport"
   expdate: string
   isPaying: boolean
-  error: string
   networks: any[]
   onIdNumberChange: (v: string) => void
   onIdTypeChange: (v: "national" | "passport") => void
@@ -193,13 +194,16 @@ function RemittanceResultStep({
       {/* Left: Remittance Info + Identity Form */}
       <div className="lg:col-span-2">
         <Card className="rounded-xl border border-border/60">
-          <CardHeader className="pb-4">
+          <CardHeader className="pb-5 border-b border-border/40 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent">
             <div className="flex items-center gap-3">
               <div className="icon-container bg-emerald-500/10 text-emerald-600">
                 <CheckCircle2 className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="text-lg">بيانات الحوالة</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-lg">بيانات الحوالة</CardTitle>
+                  <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">تأكيد</Badge>
+                </div>
                 <CardDescription>
                   تأكد من البيانات ثم أدخل هوية المستلم للدفع
                 </CardDescription>
@@ -308,15 +312,6 @@ function RemittanceResultStep({
                   </div>
                 </div>
               </div>
-
-              {error && (
-                <div className="mt-4">
-                  <Alert variant="destructive" className="rounded-xl">
-                    <XCircle className="h-4 w-4" />
-                    <div className="font-medium">{error}</div>
-                  </Alert>
-                </div>
-              )}
 
               <div className="flex gap-3 mt-5">
                 <Button
@@ -435,79 +430,6 @@ function RemittanceResultStep({
         </Card>
       </div>
     </div>
-  )
-}
-
-// ─── Step 3: Pay Success Result Card ──────────────────────────────────
-
-function PayResultCard({
-  payResult,
-  currencyCode,
-  onReset,
-}: {
-  payResult: PayResult
-  currencyCode?: string
-  onReset: () => void
-}) {
-  return (
-    <Card className="rounded-xl border border-border/60">
-      <CardHeader className="pb-4">
-        <div className="flex items-center gap-3">
-          <div className="icon-container bg-emerald-500/10 text-emerald-600">
-            <CheckCircle2 className="h-5 w-5" />
-          </div>
-          <div>
-            <CardTitle className="text-lg">تم الدفع بنجاح</CardTitle>
-            <CardDescription>
-              تفاصيل عملية الدفع
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="dash-stat-card">
-            <div className="text-xs text-muted-foreground mb-1">رقم العملية</div>
-            <div className="text-lg font-bold font-mono">{payResult.txId}</div>
-          </div>
-          <div className="dash-stat-card">
-            <div className="text-xs text-muted-foreground mb-1">رقم الحوالة</div>
-            <div className="text-lg font-bold font-mono">{payResult.expressid}</div>
-          </div>
-          <div className="dash-stat-card">
-            <div className="text-xs text-muted-foreground mb-1">المبلغ</div>
-            <div className="text-lg font-bold font-mono">
-              {payResult.amount?.toLocaleString()}{" "}
-              <span className="text-sm font-medium text-muted-foreground">{currencyCode}</span>
-            </div>
-          </div>
-          <div className="dash-stat-card">
-            <div className="text-xs text-muted-foreground mb-1">العمولة</div>
-            <div className="text-lg font-bold font-mono">{payResult.commission?.toLocaleString()}</div>
-          </div>
-        </div>
-        <div className="dash-stat-card border-primary/20 bg-primary/5">
-          <div className="flex justify-between items-center">
-            <span className="text-sm font-semibold">الإجمالي</span>
-            <span className="text-xl font-bold font-mono text-primary">
-              {payResult.totalAmount?.toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-        <Button
-          onClick={onReset}
-          variant="outline"
-          className="w-full h-11 font-semibold"
-        >
-          <div className="flex items-center gap-2">
-            <RotateCcw className="h-4 w-4" />
-            <span>بحث عن حوالة جديدة</span>
-          </div>
-        </Button>
-      </CardContent>
-    </Card>
   )
 }
 
@@ -636,11 +558,13 @@ export function RemittanceSearchPay() {
   const [isPaying, setIsPaying] = useState(false)
   const [payResult, setPayResult] = useState<PayResult | null>(null)
 
-  const [error, setError] = useState("")
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [isNetworksLoading, setIsNetworksLoading] = useState(true)
+  const [successDismissed, setSuccessDismissed] = useState(false)
 
   useEffect(() => {
     const fetchNetworks = async () => {
+      setIsNetworksLoading(true)
       try {
         const response = await apiClient.getDistWallets()
         if (response.success && response.docs) {
@@ -648,6 +572,8 @@ export function RemittanceSearchPay() {
         }
       } catch (err) {
         console.error("Failed to fetch networks:", err)
+      } finally {
+        setIsNetworksLoading(false)
       }
     }
     fetchNetworks()
@@ -655,19 +581,19 @@ export function RemittanceSearchPay() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError("")
     setSearchResult(null)
     setPayResult(null)
+    setSuccessDismissed(false)
     setIsSearching(true)
 
     try {
       if (!selectedNetwork) {
-        setError("الرجاء اختيار الشبكة")
+        toast.error("الرجاء اختيار الشبكة")
         setIsSearching(false)
         return
       }
       if (!remittanceId.trim()) {
-        setError("الرجاء إدخال رقم الحوالة")
+        toast.error("الرجاء إدخال رقم الحوالة")
         setIsSearching(false)
         return
       }
@@ -682,10 +608,10 @@ export function RemittanceSearchPay() {
           searchToken: data.searchToken,
         } as SearchResult)
       } else {
-        setError(response.message || "لم يتم العثور على الحوالة")
+        toast.error(response.message || "لم يتم العثور على الحوالة")
       }
     } catch (err: any) {
-      setError(err.message || "حدث خطأ أثناء البحث")
+      toast.error(err.message || "حدث خطأ أثناء البحث")
     } finally {
       setIsSearching(false)
     }
@@ -693,13 +619,11 @@ export function RemittanceSearchPay() {
 
   const handlePaySubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    setError("")
     setShowConfirmDialog(true)
   }
 
   const handleConfirmPay = async () => {
     if (!searchResult) return
-    setError("")
     setIsPaying(true)
 
     try {
@@ -721,12 +645,13 @@ export function RemittanceSearchPay() {
       if (response.success) {
         setPayResult(response.data as unknown as PayResult)
         setShowConfirmDialog(false)
+        setTimeout(() => setSuccessDismissed(true), 8000)
       } else {
-        setError(response.message || "فشل في دفع الحوالة")
+        toast.error(response.message || "فشل في دفع الحوالة")
         setShowConfirmDialog(false)
       }
     } catch (err: any) {
-      setError(err.message || "حدث خطأ أثناء الدفع")
+      toast.error(err.message || "حدث خطأ أثناء الدفع")
       setShowConfirmDialog(false)
     } finally {
       setIsPaying(false)
@@ -737,20 +662,75 @@ export function RemittanceSearchPay() {
     setRemittanceId("")
     setSearchResult(null)
     setPayResult(null)
-    setError("")
+    setSuccessDismissed(false)
     setIdNumber("")
     setIdType("national")
     setExpdate("")
   }
 
-  // Step 3: Pay success
-  if (payResult) {
+  // Step 3: Pay success — compact & inline card
+  if (payResult && !successDismissed) {
     return (
-      <PayResultCard
-        payResult={payResult}
-        currencyCode={searchResult?.currencyCode}
-        onReset={handleReset}
-      />
+      <Card className="rounded-xl border border-border/60">
+        <CardHeader className="pb-5 border-b border-border/40 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="icon-container bg-emerald-500/10 text-emerald-600">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-lg">تم الدفع بنجاح</CardTitle>
+                  <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">مكتمل</Badge>
+                </div>
+                <CardDescription>تفاصيل عملية الدفع</CardDescription>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSuccessDismissed(true)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="dash-stat-card">
+              <div className="text-xs text-muted-foreground mb-1">رقم العملية</div>
+              <div className="text-lg font-bold font-mono">{payResult.txId}</div>
+            </div>
+            <div className="dash-stat-card">
+              <div className="text-xs text-muted-foreground mb-1">رقم الحوالة</div>
+              <div className="text-lg font-bold font-mono">{payResult.expressid}</div>
+            </div>
+            <div className="dash-stat-card">
+              <div className="text-xs text-muted-foreground mb-1">المبلغ</div>
+              <div className="text-lg font-bold font-mono">
+                {payResult.amount?.toLocaleString()}{" "}
+                <span className="text-sm font-medium text-muted-foreground">{searchResult?.currencyCode}</span>
+              </div>
+            </div>
+            <div className="dash-stat-card">
+              <div className="text-xs text-muted-foreground mb-1">العمولة</div>
+              <div className="text-lg font-bold font-mono">{payResult.commission?.toLocaleString()}</div>
+            </div>
+          </div>
+          <div className="dash-stat-card border-primary/20 bg-primary/5">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-semibold">الإجمالي</span>
+              <span className="text-xl font-bold font-mono text-primary">
+                {payResult.totalAmount?.toLocaleString()}
+              </span>
+            </div>
+          </div>
+          <Button onClick={handleReset} variant="outline" className="w-full h-11 font-semibold">
+            <RotateCcw className="ml-2 h-4 w-4" />
+            بحث عن حوالة جديدة
+          </Button>
+        </CardContent>
+      </Card>
     )
   }
 
@@ -764,7 +744,6 @@ export function RemittanceSearchPay() {
           idType={idType}
           expdate={expdate}
           isPaying={isPaying}
-          error={error}
           networks={networks}
           onIdNumberChange={setIdNumber}
           onIdTypeChange={(v) => setIdType(v)}
@@ -794,7 +773,6 @@ export function RemittanceSearchPay() {
       selectedNetwork={selectedNetwork}
       remittanceId={remittanceId}
       isSearching={isSearching}
-      error={error}
       searchResult={searchResult}
       onNetworkChange={setSelectedNetwork}
       onRemittanceIdChange={setRemittanceId}

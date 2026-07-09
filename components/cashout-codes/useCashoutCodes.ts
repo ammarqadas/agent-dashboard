@@ -71,7 +71,7 @@ export function useCashoutCodePay() {
   const pay = useCallback(async (code: string) => {
     setIsPaying(true)
     try {
-      const response = await apiClient.payCashoutCode(code)
+      const response = await apiClient.payCashoutCodeGeneric(code)
       if (response.success) {
         return { success: true, message: "تم دفع كود السحب بنجاح" }
       }

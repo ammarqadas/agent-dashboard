@@ -186,16 +186,18 @@ class ApiClient {
 
   // Deposit to wallet
   async depositToWallet(mobile: string, amount: number, currency: string | number, notes?: string) {
-    return this.request('/agent/deposit', {
+    return this.request('/action/execute-generic', {
       method: 'POST',
-      body: JSON.stringify({
-        deposits: [{
-          mobile,
+      body: JSON.stringify(
+        {
+  actionKey: "agent_deposit",
+  payload: {
+   mobile,
           amount,
           currency,
           notes,
-        }],
-      }),
+  }
+}),
     })
   }
 
@@ -204,17 +206,26 @@ class ApiClient {
     return this.request(`/cashout-codes/search?code=${encodeURIComponent(code)}`)
   }
 
-  async payCashoutCode(code: string, notes?: string) {
-    return this.request('/cashout-codes/pay', {
+  async payCashoutCodeGeneric(code: string, notes?: string) {
+    return this.request('/action/execute-generic', {
       method: 'POST',
-      body: JSON.stringify({ code, notes }),
+      body: JSON.stringify({
+        actionKey: "agent_cashout_code_pay",
+        code,
+        notes,
+      }),
     })
   }
 
-  async createCashoutCode(mobile: string, amount: number, currency: string | number) {
-    return this.request('/cashout-codes/agent-create', {
+  async createCashoutCodeGeneric(data: { mobile: string; amount: number; currency: string | number }) {
+    return this.request('/action/execute-generic', {
       method: 'POST',
-      body: JSON.stringify({ mobile, amount, currency }),
+      body: JSON.stringify({
+        actionKey: "agent_cashout_code_create",
+        mobile: data.mobile,
+        amount: data.amount,
+        currency: data.currency,
+      }),
     })
   }
 

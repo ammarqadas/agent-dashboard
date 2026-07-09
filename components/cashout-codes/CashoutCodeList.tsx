@@ -10,6 +10,16 @@ import { useCashoutCodesList, useCashoutCodePay } from "./useCashoutCodes"
 import { RefreshCcw, Inbox, Plus } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { XCircle } from "lucide-react"
 
 const PAGE_SIZES = [10, 25, 50]
 
@@ -19,19 +29,25 @@ export function CashoutCodeList() {
   const [pageSize, setPageSize] = useState(25)
   const { data: codes, total, isLoading, error, refetch } = useCashoutCodesList(statusFilter, page, pageSize)
   const { pay, isPaying } = useCashoutCodePay()
+  const [payDialogCode, setPayDialogCode] = useState<string | null>(null)
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   const handlePay = useCallback(async (code: string) => {
-    if (!confirm("هل أنت متأكد من دفع كود السحب؟")) return
-    const result = await pay(code)
+    setPayDialogCode(code)
+  }, [])
+
+  const handleConfirmPay = async () => {
+    if (!payDialogCode) return
+    const result = await pay(payDialogCode)
     if (result.success) {
       toast.success(result.message)
       refetch()
     } else {
       toast.error(result.message)
     }
-  }, [pay, refetch])
+    setPayDialogCode(null)
+  }
 
   const handleStatusChange = (value: string) => {
     setStatusFilter(value)
@@ -100,44 +116,44 @@ export function CashoutCodeList() {
               ))}
             </TableBody>
           </Table>
-        ) : codes.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 py-16 text-center">
-            <div className="rounded-full bg-muted p-4">
-              <Inbox className="h-8 w-8 text-muted-foreground" />
+          ) : codes.length === 0 ? (
+            <div className="flex flex-col items-center gap-4 py-16 text-center">
+              <div className="rounded-full bg-muted p-4">
+                <Inbox className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-lg font-medium text-foreground">لا توجد أكواد</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {statusFilter === "all" ? "لم يتم إنشاء أي كود سحب بعد" : `لا توجد أكواد بحالة "${statusFilter === "pending" ? "معلّق" : statusFilter === "paid" ? "مدفوع" : "منتهي"}"`}
+                </p>
+              </div>
+              <Link href="/dashboard/cashout-codes/create">
+                <Button>
+                  <Plus className="h-4 w-4 ml-1" />
+                  إنشاء كود جديد
+                </Button>
+              </Link>
             </div>
-            <div>
-              <p className="text-lg font-medium text-foreground">لا توجد أكواد</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {statusFilter === "all" ? "لم يتم إنشاء أي كود سحب بعد" : `لا توجد أكواد بحالة "${statusFilter === "pending" ? "معلّق" : statusFilter === "paid" ? "مدفوع" : "منتهي"}"`}
-              </p>
-            </div>
-            <Link href="/dashboard/cashout-codes/create">
-              <Button>
-                <Plus className="h-4 w-4 ml-1" />
-                إنشاء كود جديد
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>الكود</TableHead>
-                  <TableHead>المبلغ</TableHead>
-                  <TableHead>العملة</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>المحفظة</TableHead>
-                  <TableHead>تاريخ الإنشاء</TableHead>
-                  <TableHead>الإجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {codes.map((code: any) => (
-                  <CashoutCodeRow key={code.id} code={code} onPay={handlePay} />
-                ))}
-              </TableBody>
-            </Table>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>الكود</TableHead>
+                    <TableHead>المبلغ</TableHead>
+                    <TableHead>العملة</TableHead>
+                    <TableHead>الحالة</TableHead>
+                    <TableHead>المحفظة</TableHead>
+                    <TableHead>تاريخ الإنشاء</TableHead>
+                    <TableHead>الإجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {codes.map((code: any) => (
+                    <CashoutCodeRow key={code.id} code={code} onPay={setPayDialogCode} showActions={code.status === "pending"} />
+                  ))}
+                </TableBody>
+              </Table>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4 pt-4 border-t">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

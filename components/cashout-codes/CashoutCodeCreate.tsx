@@ -12,8 +12,19 @@ import Link from "next/link"
 import { Eye, ArrowLeft } from "lucide-react"
 import { apiClient } from "@/lib/api"
 
+const getMobileFromForm = (mobileStr: string) => {
+  if (!mobileStr) return mobileStr
+  const cleanMobile = mobileStr.replace(/^\+?966/, "").replace(/^0/, "")
+  const trimmedMobile = cleanMobile.replace(/^\+?\d*?(?=7\d{8})$/, "") + "7" + cleanMobile.replace(/^\+?\d*?(?=(?!7\d{8})\d+$)/, "")
+  if (/^7\d{8}$/.test(trimmedMobile)) {
+    return trimmedMobile
+  }
+  return mobileStr
+}
+
 function validateMobile(mobile: string): string | null {
-  if (!/^7\d{8}$/.test(mobile)) return "رقم الجوال غير صحيح. يجب أن يبدأ بـ 7 ويتكون من 9 أرقام"
+  const cleanMobile = getMobileFromForm(mobile)
+  if (!/^7\d{8}$/.test(cleanMobile)) return "رقم الجوال غير صحيح. يجب أن يبدأ بـ 7 ويتكون من 9 أرقام"
   return null
 }
 
@@ -51,7 +62,12 @@ export function CashoutCodeCreate() {
     setIsCreating(true)
     try {
       const parsedAmount = parseFloat(amount)
-      const response = await apiClient.createCashoutCode(mobile, parsedAmount, currencyId)
+      const cleanMobile = getMobileFromForm(mobile)
+      const response = await apiClient.createCashoutCodeGeneric({
+        mobile: cleanMobile,
+        amount: parsedAmount,
+        currency: currencyId
+      })
 
       if (response.success) {
         const createdCode = response.code || response.result?.code
