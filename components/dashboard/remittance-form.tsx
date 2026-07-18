@@ -176,8 +176,8 @@ export function RemittanceForm() {
           })
           if (response.success) {
             commission = {
-              totalCommission: response.totalCommission ?? response.CenterCommission ?? 0,
-              totalAmount: response.totalAmount ?? amountNum,
+              totalCommission: response.totalCommission ?? response.commission ?? 0,
+              totalAmount: response.totalAmount ?? response.amount ?? amountNum,
               searchToken: response.searchToken,
             }
             setCommissionResult(commission)
