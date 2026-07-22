@@ -43,14 +43,10 @@ export function AgentAccount() {
     setIsLoading(true)
     setError("")
     try {
-      const [infoResponse, accountResponse] = await Promise.all([
-        apiClient.getAgentInfo(),
-        apiClient.getAgentAccount(),
-      ])
+      const accountResponse = await apiClient.getAgentAccount()
 
-      if (infoResponse.success) {
-        setAgentInfo(infoResponse.user || infoResponse.data)
-      }
+      const stored = JSON.parse(localStorage.getItem("agentUser") || "{}")
+      setAgentInfo(stored)
 
       if (accountResponse.success) {
         setAccounts(accountResponse.docs || accountResponse.data || [])

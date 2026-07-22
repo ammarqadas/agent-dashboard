@@ -88,7 +88,12 @@ export function BulkRemittanceForm() {
             try {
                 const response = await apiClient.getDistWallets()
                 if (response.success && response.docs) {
-                    setDistWallets(response.docs)
+                    const agentUser = JSON.parse(localStorage.getItem("agentUser") || "{}")
+                    const allowedNetworks: any[] = agentUser.allowedNetworks || []
+                    const filtered = allowedNetworks.length > 0
+                        ? response.docs.filter((w: any) => allowedNetworks.some((n: any) => n.key === w.key))
+                        : response.docs
+                    setDistWallets(filtered)
                 }
             } catch (err) {
                 console.error("Failed to fetch distribution wallets:", err)

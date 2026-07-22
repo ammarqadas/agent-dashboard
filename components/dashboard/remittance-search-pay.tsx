@@ -568,7 +568,12 @@ export function RemittanceSearchPay() {
       try {
         const response = await apiClient.getDistWallets()
         if (response.success && response.docs) {
-          setNetworks(response.docs)
+          const agentUser = JSON.parse(localStorage.getItem("agentUser") || "{}")
+          const allowedNetworks: any[] = agentUser.allowedNetworks || []
+          const filtered = allowedNetworks.length > 0
+            ? response.docs.filter((n: any) => allowedNetworks.some((a: any) => a.key === n.key))
+            : response.docs
+          setNetworks(filtered)
         }
       } catch (err) {
         console.error("Failed to fetch networks:", err)

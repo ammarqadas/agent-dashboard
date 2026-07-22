@@ -47,6 +47,7 @@ export function RemittanceForm() {
   const [showDialog, setShowDialog] = useState(false)
   const [isCurrenciesLoading, setIsCurrenciesLoading] = useState(true)
   const [isDistWalletsLoading, setIsDistWalletsLoading] = useState(true)
+  const [hasNoAllowedNetworks, setHasNoAllowedNetworks] = useState(false)
   const [commissionResult, setCommissionResult] = useState<{
     totalCommission: number
     totalAmount: number
@@ -98,7 +99,15 @@ export function RemittanceForm() {
       try {
         const response = await apiClient.getDistWallets()
         if (response.success && response.docs) {
-          setDistWallets(response.docs)
+          const agentUser = JSON.parse(localStorage.getItem("agentUser") || "{}")
+          const allowedNetworks: any[] = agentUser.allowedNetworks || []
+          if (allowedNetworks.length === 0) {
+            setHasNoAllowedNetworks(true)
+            setDistWallets([])
+          } else {
+            const filtered = response.docs.filter((w: any) => allowedNetworks.some((n: any) => n.key === w.key))
+            setDistWallets(filtered)
+          }
         }
       } catch (err) {
         console.error("Failed to fetch distribution wallets:", err)

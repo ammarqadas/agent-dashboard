@@ -144,7 +144,7 @@ class ApiClient {
   // Agent authentication
   async agentLogin(email: string, password: string) {
     const response = await this.request<{ token: string; user: any }>(
-      '/agents/login',
+      '/agent/login',
       {
         method: 'POST',
         body: JSON.stringify({ email, password }),
@@ -346,10 +346,6 @@ class ApiClient {
   // Agent account
   async getAgentAccount() {
     return this.request('/accounts?owner=agent')
-  }
-
-  async getAgentInfo() {
-    return this.request('/agents/me')
   }
 
   // Get currencies
