@@ -57,7 +57,7 @@ type PayResult = {
 function SearchRemittanceCard({
   networks,
   selectedNetwork,
-  remittanceId,
+  inputRemittanceId,
   isSearching,
   searchResult,
   onNetworkChange,
@@ -66,7 +66,7 @@ function SearchRemittanceCard({
 }: {
   networks: any[]
   selectedNetwork: string
-  remittanceId: string
+  inputRemittanceId: string
   isSearching: boolean
   searchResult: SearchResult | null
   onNetworkChange: (v: string) => void
@@ -119,13 +119,13 @@ function SearchRemittanceCard({
             </div>
 
             <div className="form-field">
-              <Label htmlFor="remittanceId" className="text-sm font-medium">رقم الحوالة (Express ID)</Label>
+              <Label htmlFor="inputRemittanceId" className="text-sm font-medium">رقم الحوالة (Express ID)</Label>
               <div className="input-icon-wrapper">
                 <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                 <Input
-                  id="remittanceId"
+                  id="inputRemittanceId"
                   placeholder="أدخل رقم الحوالة"
-                  value={remittanceId}
+                  value={inputRemittanceId}
                   onChange={(e) => onRemittanceIdChange(e.target.value)}
                   disabled={!!searchResult}
                   dir="ltr"
@@ -546,7 +546,7 @@ function PayConfirmDialog({
 export function RemittanceSearchPay() {
   const [networks, setNetworks] = useState<any[]>([])
   const [selectedNetwork, setSelectedNetwork] = useState("")
-  const [remittanceId, setRemittanceId] = useState("")
+  const [inputRemittanceId, setInputRemittanceId] = useState("")
 
   const [isSearching, setIsSearching] = useState(false)
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null)
@@ -597,13 +597,13 @@ export function RemittanceSearchPay() {
         setIsSearching(false)
         return
       }
-      if (!remittanceId.trim()) {
+      if (!inputRemittanceId.trim()) {
         toast.error("الرجاء إدخال رقم الحوالة")
         setIsSearching(false)
         return
       }
 
-      const response = await apiClient.agentRemittanceSearch(selectedNetwork, remittanceId.trim())
+      const response = await apiClient.agentRemittanceSearch(selectedNetwork, inputRemittanceId.trim())
 
       if (response.success) {
         const { success, message, ...data } = response
@@ -664,7 +664,7 @@ export function RemittanceSearchPay() {
   }
 
   const handleReset = () => {
-    setRemittanceId("")
+    setInputRemittanceId("")
     setSearchResult(null)
     setPayResult(null)
     setSuccessDismissed(false)
@@ -776,11 +776,11 @@ export function RemittanceSearchPay() {
     <SearchRemittanceCard
       networks={networks}
       selectedNetwork={selectedNetwork}
-      remittanceId={remittanceId}
+      inputRemittanceId={inputRemittanceId}
       isSearching={isSearching}
       searchResult={searchResult}
       onNetworkChange={setSelectedNetwork}
-      onRemittanceIdChange={setRemittanceId}
+      onRemittanceIdChange={setInputRemittanceId}
       onSubmit={handleSearch}
     />
   )
