@@ -251,7 +251,7 @@ class ApiClient {
   async agentRemittanceSearch(networkKey: string, remittanceId: string) {
     return this.request('/presubmit/execute', {
       method: 'POST',
-      body: JSON.stringify({ networkKey, configType: "search", remittanceId }),
+      body: JSON.stringify({ networkKey, configType: "search", inputRemittanceId: remittanceId }),
     })
   }
 
