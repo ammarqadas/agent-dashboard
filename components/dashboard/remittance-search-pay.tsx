@@ -40,6 +40,7 @@ import { apiClient } from "@/lib/api"
 type SearchResult = {
   networkKey: string
   searchToken: string
+  remittanceId: string
   [key: string]: any
 }
 
@@ -633,6 +634,7 @@ export function RemittanceSearchPay() {
 
     try {
       const payload = {
+        inputRemittanceId,
         searchToken: searchResult.searchToken,
         amount: searchResult.amount,
         currency: searchResult.currencyCode,
