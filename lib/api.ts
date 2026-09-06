@@ -1,30 +1,19 @@
-// Use Next.js API proxy to avoid CORS issues.
-// IMPORTANT: even if NEXT_PUBLIC_API_URL is set to a full backend URL (cross-origin),
-// we will automatically fall back to same-origin '/api/proxy' to prevent browser CORS failures.
-const DEFAULT_PROXY_BASE = '/api/proxy'
+// All API calls go through the same-origin Next.js proxy (/api/proxy).
+// The browser never holds credentials: the session lives in an HttpOnly
+// cookie managed by the server; this client only handles the CSRF token.
 
-const resolveApiBaseUrl = (): string => {
-  const env = process.env.NEXT_PUBLIC_API_URL
-  if (!env) return DEFAULT_PROXY_BASE
+const API_BASE_URL = '/api/proxy'
+const REQUEST_TIMEOUT_MS = 30_000
+// Identity upload validates and re-encodes two images upstream; give it
+// more headroom than the default request window.
+const IDENTITY_UPLOAD_TIMEOUT_MS = 95_000
+const CSRF_COOKIE = 'agent_csrf'
+const CSRF_HEADER = 'X-CSRF-Token'
 
-  // On the server, relative URLs are safest and always work.
-  if (typeof window === 'undefined') return env.startsWith('/') ? env : DEFAULT_PROXY_BASE
-
-  // In the browser, if env is absolute and points to a different origin, force proxy.
-  try {
-    if (/^https?:\/\//i.test(env)) {
-      const u = new URL(env)
-      if (u.origin !== window.location.origin) return DEFAULT_PROXY_BASE
-    }
-  } catch {
-    // If parsing fails, fall back to proxy.
-    return DEFAULT_PROXY_BASE
-  }
-
-  return env
+type ApiRequestInit = RequestInit & {
+  redirectOnUnauthorized?: boolean
+  timeoutMs?: number
 }
-
-const API_BASE_URL = resolveApiBaseUrl()
 
 export interface ApiResponse<T = any> {
   success: boolean
@@ -33,126 +22,188 @@ export interface ApiResponse<T = any> {
   [key: string]: any
 }
 
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+const readCsrfToken = (): string | null => {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${CSRF_COOKIE}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+// Migration hygiene: remove credentials previously kept in localStorage.
+const clearLegacyStorage = () => {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem('agentToken')
+  localStorage.removeItem('isAuthenticated')
+  localStorage.removeItem('agentUser')
+}
+
+let redirectingToLogin = false
+const redirectToLogin = () => {
+  if (typeof window === 'undefined' || redirectingToLogin) return
+  redirectingToLogin = true
+  window.location.replace('/')
+}
+
+const encodeId = (id: string | number): string => encodeURIComponent(String(id))
+
 class ApiClient {
-  private baseUrl: string
-  private token: string | null = null
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('agentToken')
-    }
-  }
-
-  setToken(token: string) {
-    this.token = token
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('agentToken', token)
-    }
-  }
-
-  clearToken() {
-    this.token = null
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('agentToken')
-    }
-  }
-
-  // Reload token from localStorage (useful when token might have been updated)
-  private reloadToken() {
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('agentToken')
-    }
-  }
-
-  // Handle 403/401 responses by clearing token and redirecting
-  private handleAuthError() {
-    this.clearToken()
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('isAuthenticated')
-      localStorage.removeItem('agentUser')
-      // Redirect to login page
-      window.location.href = '/'
-    }
-  }
-
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: ApiRequestInit = {}
   ): Promise<ApiResponse<T>> {
-    // Reload token from localStorage before each request to ensure we have the latest token
-    this.reloadToken()
-
-    // Ensure endpoint starts with / if baseUrl doesn't end with /
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-    const url = `${this.baseUrl}${cleanEndpoint}`
-
-    // Debug: log the URL being called (remove in production)
-    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-      console.log('[API Client] Requesting:', url)
+    // Defense-in-depth: reject traversal and absolute-URL injection.
+    if (cleanEndpoint.includes('..') || /^[a-z][a-z0-9+.-]*:/i.test(cleanEndpoint)) {
+      return { success: false, message: 'Invalid request endpoint.' }
     }
+    const url = `${API_BASE_URL}${cleanEndpoint}`
 
-    const headers = new Headers(options.headers)
-    // Ensure JSON by default, but never force it for FormData (multipart)
+    const {
+      redirectOnUnauthorized = true,
+      timeoutMs = REQUEST_TIMEOUT_MS,
+      ...requestOptions
+    } = options
+    const method = (requestOptions.method || 'GET').toUpperCase()
+    const headers = new Headers(requestOptions.headers)
     const isFormData =
-      typeof FormData !== 'undefined' && options.body instanceof FormData
-    if (!isFormData && !headers.has('Content-Type')) {
+      typeof FormData !== 'undefined' && requestOptions.body instanceof FormData
+    if (!isFormData && requestOptions.body != null && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json')
     }
+    if (UNSAFE_METHODS.has(method)) {
+      const csrf = readCsrfToken()
+      if (csrf) headers.set(CSRF_HEADER, csrf)
+    }
 
-    if (this.token && !headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${this.token}`)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const externalSignal = requestOptions.signal
+    const onExternalAbort = () => controller.abort()
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort()
+      else externalSignal.addEventListener('abort', onExternalAbort)
     }
 
     try {
       const response = await fetch(url, {
-        ...options,
+        ...requestOptions,
+        method,
         headers,
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: controller.signal,
       })
 
-      // Handle 401/403 authentication errors
-      if (response.status === 401 || response.status === 403) {
-        this.handleAuthError()
-        const data = await response.json().catch(() => ({}))
-        return {
-          success: false,
-          message: data.message || 'Authentication failed. Please login again.',
+      // 401: session expired/invalid → clear state and redirect once.
+      if (response.status === 401 && redirectOnUnauthorized) {
+        clearLegacyStorage()
+        if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+          redirectToLogin()
         }
+        return { success: false, message: 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.' }
+      }
+      // 403: permission denied — keep the session, surface the message only.
+      if (response.status === 403) {
+        const data = await response.json().catch(() => ({}))
+        return { success: false, message: data?.message || 'ليس لديك صلاحية للقيام بهذا الإجراء.' }
+      }
+      if (response.status === 413) {
+        return { success: false, message: 'حجم البيانات المرسلة كبير جداً.' }
+      }
+      if (response.status === 429) {
+        return { success: false, message: 'عدد كبير من المحاولات. يرجى المحاولة لاحقاً.' }
       }
 
-      const data = await response.json()
+      const contentType = response.headers.get('content-type') || ''
+      let data: any = {}
+      if (response.status !== 204 && response.status !== 304) {
+        if (contentType.includes('application/json')) {
+          data = await response.json().catch(() => ({}))
+        } else {
+          await response.text().catch(() => '')
+        }
+      }
 
       if (!response.ok) {
         return {
+          ...data,
           success: false,
-          message: data.message || `HTTP error! status: ${response.status}`,
+          message: data?.message || `HTTP error! status: ${response.status}`,
         }
       }
 
-      return {
-        success: true,
-        ...data,
-      }
-    } catch (error) {
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Network error',
-      }
+      return { success: true, ...data }
+    } catch {
+      // Never expose raw exception details (may contain internal URLs).
+      return controller.signal.aborted
+        ? {
+            success: false,
+            code: 'CLIENT_TIMEOUT',
+            message: 'انتهت مهلة انتظار الخادم. قد تكون العملية ما زالت قيد التنفيذ.',
+          }
+        : { success: false, message: 'تعذر الاتصال بالخادم. يرجى المحاولة مرة أخرى.' }
+    } finally {
+      clearTimeout(timer)
+      externalSignal?.removeEventListener('abort', onExternalAbort)
     }
   }
 
-  // Agent authentication
-  async agentLogin(email: string, password: string) {
-    const response = await this.request<{ token: string; user: any }>(
-      '/agent/login',
-      {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      }
-    )
+  // ---- Session management (server-managed HttpOnly cookie) ----
 
-    if (response.success && response.token) {
-      this.setToken(response.token)
+  async getSession(): Promise<{ authenticated: boolean; expiresAt?: number }> {
+    if (typeof window === 'undefined') return { authenticated: false }
+    try {
+      const res = await fetch('/api/auth/session', {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      })
+      if (!res.ok) return { authenticated: false }
+      return await res.json()
+    } catch {
+      return { authenticated: false }
+    }
+  }
+
+  async logout() {
+    if (typeof window !== 'undefined') {
+      try {
+        const csrf = readCsrfToken()
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: csrf ? { [CSRF_HEADER]: csrf } : undefined,
+        })
+      } catch {
+        // Ignore — local state is cleared regardless.
+      }
+      sessionStorage.removeItem('agentUser')
+      clearLegacyStorage()
+    }
+    return { success: true as const }
+  }
+
+  // ---- Agent authentication ----
+
+  async agentLogin(email: string, password: string) {
+    const response = await this.request<{ user?: any }>('/agent/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+
+    // The HttpOnly session cookie is set by the server. Only non-sensitive
+    // display info is kept locally.
+    if (response.success && typeof window !== 'undefined') {
+      const user = response.user || response.data
+      if (user) {
+        try {
+          sessionStorage.setItem('agentUser', JSON.stringify(user))
+        } catch {
+          // Non-fatal: display name falls back to default.
+        }
+      }
+      clearLegacyStorage()
     }
 
     return response
@@ -173,12 +224,13 @@ class ApiClient {
 
   // Get wallet details
   async getWallet(id: string | number, depth: number = 2) {
-    return this.request(`/wallets/${id}?depth=${depth}`)
+    const d = Math.min(5, Math.max(0, Math.floor(Number(depth) || 0)))
+    return this.request(`/wallets/${encodeId(id)}?depth=${d}`)
   }
 
   // Activate/deactivate wallet
   async updateWallet(id: string | number, data: { active?: boolean;[key: string]: any }) {
-    return this.request(`/wallets/${id}`, {
+    return this.request(`/wallets/${encodeId(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     })
@@ -188,16 +240,15 @@ class ApiClient {
   async depositToWallet(mobile: string, amount: number, currency: string | number, notes?: string) {
     return this.request('/action/execute-generic', {
       method: 'POST',
-      body: JSON.stringify(
-        {
-  actionKey: "agent_deposit",
-  payload: {
-   mobile,
+      body: JSON.stringify({
+        actionKey: 'agent_deposit',
+        payload: {
+          mobile,
           amount,
           currency,
           notes,
-  }
-}),
+        },
+      }),
     })
   }
 
@@ -210,7 +261,7 @@ class ApiClient {
     return this.request('/action/execute-generic', {
       method: 'POST',
       body: JSON.stringify({
-        actionKey: "agent_cashout_code_pay",
+        actionKey: 'agent_cashout_code_pay',
         code,
         notes,
       }),
@@ -221,7 +272,7 @@ class ApiClient {
     return this.request('/action/execute-generic', {
       method: 'POST',
       body: JSON.stringify({
-        actionKey: "agent_cashout_code_create",
+        actionKey: 'agent_cashout_code_create',
         mobile: data.mobile,
         amount: data.amount,
         currency: data.currency,
@@ -247,11 +298,11 @@ class ApiClient {
     })
   }
 
-  // Search Remittance — POST /api/presubmit/execute
+  // Search Remittance — POST /agent/remittance/search
   async agentRemittanceSearch(networkKey: string, remittanceId: string) {
-    return this.request('/presubmit/execute', {
+    return this.request('/agent/remittance/search', {
       method: 'POST',
-      body: JSON.stringify({ networkKey, configType: "search", inputRemittanceId: remittanceId }),
+      body: JSON.stringify({ networkKey, inputRemittanceId: remittanceId }),
     })
   }
 
@@ -263,7 +314,7 @@ class ApiClient {
   }) {
     return this.request('/presubmit/execute', {
       method: 'POST',
-      body: JSON.stringify({ configType: "preSubmit", ...data }),
+      body: JSON.stringify({ configType: 'preSubmit', ...data }),
     })
   }
 
@@ -282,27 +333,84 @@ class ApiClient {
   }) {
     return this.request('/agent/action/execute-generic', {
       method: 'POST',
-      body: JSON.stringify({ networkKey, configType: "send", ...payload }),
+      body: JSON.stringify({ networkKey, configType: 'send', ...payload }),
     })
   }
 
-  // Pay Remittance — POST /api/agent/action/execute-generic
-  async agentRemittancePay(networkKey: string, payload: {
+  // Identity upload — POST /agent/remittance/identity/upload (multipart/form-data)
+  // One request carries identity metadata + front/back images.
+  // The backend stores images internally and returns only a payout
+  // authorization token — storage URLs never reach the browser.
+  async agentRemittanceIdentityUpload(args: {
     searchToken: string
-    amount: number
-    currency?: string | number
-    senderName?: string
-    senderMobile?: string
-    receiverName?: string
-    receiverMobile?: string
-    idNumber?: string
-    type?: string
-    expdate?: string
-    [key: string]: any
+    type: 'national' | 'passport'
+    idNumber: string
+    issueDate: string
+    expiryDate: string
+    issuePlace: string
+    front: File
+    back: File
   }) {
+    const fd = new FormData()
+    fd.set('searchToken', args.searchToken)
+    fd.set('type', args.type)
+    fd.set('idNumber', args.idNumber)
+    fd.set('issueDate', args.issueDate)
+    fd.set('expiryDate', args.expiryDate)
+    fd.set('issuePlace', args.issuePlace)
+    fd.set('front', args.front)
+    fd.set('back', args.back)
+
+    // IMPORTANT: don't set Content-Type; browser will set multipart boundary
+    // Completion re-encodes both images server-side, so allow a longer window.
+    return this.request('/agent/remittance/identity/upload', {
+      method: 'POST',
+      body: fd,
+      headers: {}, // avoid JSON content-type
+      timeoutMs: IDENTITY_UPLOAD_TIMEOUT_MS,
+    })
+  }
+
+  async agentRemittanceIdentityOtpSend(searchToken: string, candidateToken: string) {
+    return this.request<{
+      destinationMasked: string
+      expiresInSeconds: number
+      resendAfterSeconds: number
+    }>('/agent/remittance/identity/otp/send', {
+      method: 'POST',
+      body: JSON.stringify({ searchToken, candidateToken }),
+      redirectOnUnauthorized: false,
+    })
+  }
+
+  async agentRemittanceIdentityOtpVerify(searchToken: string, otp: string) {
+    return this.request<{ identityAuthorizationToken: string; nextAction: 'pay' }>(
+      '/agent/remittance/identity/otp/verify',
+      {
+        method: 'POST',
+        body: JSON.stringify({ searchToken, otp }),
+        redirectOnUnauthorized: false,
+      }
+    )
+  }
+
+  // Pay Remittance — POST /agent/action/execute-generic (JSON, no images)
+  // Requires an Idempotency-Key; the same key must be reused for retries of
+  // the same payout (the authorization token is consumed on first attempt).
+  async agentRemittancePay(
+    networkKey: string,
+    payload: {
+      searchToken: string
+      inputRemittanceId: string
+      identityAuthorizationToken: string
+    },
+    idempotencyKey: string
+  ) {
     return this.request('/agent/action/execute-generic', {
       method: 'POST',
-      body: JSON.stringify({ networkKey, configType: "pay", ...payload }),
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify({ networkKey, configType: 'pay', ...payload }),
+      timeoutMs: 80_000,
     })
   }
 
@@ -328,7 +436,7 @@ class ApiClient {
 
   // Transactions
   async getWalletTransactions(walletId: string | number) {
-    return this.request(`/wallets/${walletId}/transactions`)
+    return this.request(`/wallets/${encodeId(walletId)}/transactions`)
   }
 
   async getTransactions(filters?: {
@@ -364,7 +472,7 @@ class ApiClient {
 
   // Get account by ID
   async getAccount(accountId: string | number) {
-    return this.request(`/accounts/${accountId}`)
+    return this.request(`/accounts/${encodeId(accountId)}`)
   }
 
   // Agent: upsert wallet identity (multipart/form-data)
@@ -397,4 +505,4 @@ class ApiClient {
   }
 }
 
-export const apiClient = new ApiClient(API_BASE_URL)
+export const apiClient = new ApiClient()

@@ -88,7 +88,7 @@ export function BulkRemittanceForm() {
             try {
                 const response = await apiClient.getDistWallets()
                 if (response.success && response.docs) {
-                    const agentUser = JSON.parse(localStorage.getItem("agentUser") || "{}")
+                    const agentUser = JSON.parse(sessionStorage.getItem("agentUser") || "{}")
                     const allowedNetworks: any[] = agentUser.allowedNetworks || []
                     const filtered = allowedNetworks.length > 0
                         ? response.docs.filter((w: any) => allowedNetworks.some((n: any) => n.key === w.key))

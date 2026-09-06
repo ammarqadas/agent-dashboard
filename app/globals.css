@@ -249,3 +249,40 @@
     @apply relative;
   }
 }
+
+/* ─── Print styles: clean printable slip ─────────────────────────────── */
+@media print {
+  @page {
+    size: A5;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  .print-area {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .print-slip {
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 12px;
+    page-break-inside: avoid;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Keep ID images visible when printing */
+  .print-slip img {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

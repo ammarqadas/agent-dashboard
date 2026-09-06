@@ -22,9 +22,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { CheckCircle2, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle, RotateCcw, FileText, Send, X } from "lucide-react"
+import { CheckCircle2, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle, RotateCcw, FileText, Send, X, Printer } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
+import { formatDate, formatTime, pickString } from "@/lib/utils"
 
 export function RemittanceForm() {
   const [formData, setFormData] = useState({
@@ -43,6 +44,7 @@ export function RemittanceForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState<any>(null)
   const [successDismissed, setSuccessDismissed] = useState(false)
+  const [agentName, setAgentName] = useState("وكيل")
   const [isFetchingCommission, setIsFetchingCommission] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [isCurrenciesLoading, setIsCurrenciesLoading] = useState(true)
@@ -77,6 +79,15 @@ export function RemittanceForm() {
   }
 
   useEffect(() => {
+    try {
+      const agentUser = JSON.parse(sessionStorage.getItem("agentUser") || "{}")
+      setAgentName(agentUser.name || "وكيل")
+    } catch {
+      setAgentName("وكيل")
+    }
+  }, [])
+
+  useEffect(() => {
     const fetchCurrencies = async () => {
       setIsCurrenciesLoading(true)
       try {
@@ -99,7 +110,7 @@ export function RemittanceForm() {
       try {
         const response = await apiClient.getDistWallets()
         if (response.success && response.docs) {
-          const agentUser = JSON.parse(localStorage.getItem("agentUser") || "{}")
+          const agentUser = JSON.parse(sessionStorage.getItem("agentUser") || "{}")
           const allowedNetworks: any[] = agentUser.allowedNetworks || []
           if (allowedNetworks.length === 0) {
             setHasNoAllowedNetworks(true)
@@ -248,7 +259,30 @@ export function RemittanceForm() {
       })
 
       if (response.success) {
-        setSuccess(response.data)
+        const resData: Record<string, any> =
+          typeof response.data === "object" && response.data !== null ? response.data : {}
+        setSuccess({
+          ...resData,
+          transactionId:
+            pickString(resData, ["transactionId", "txId", "transaction_id", "operationId", "operation_id", "id"]) ?? "",
+          expressid:
+            pickString(resData, ["expressid", "expressId", "expressID", "remittanceId", "remittance_id"]) ?? "",
+          senderName: confirmData.senderName || resData.senderName,
+          senderMobile:
+            confirmData.senderMobile ||
+            formData.senderMobile ||
+            pickString(resData, ["senderMobile", "sender_mobile", "senderPhone"]) ||
+            "",
+          receiverName: confirmData.receiverName || resData.receiverName,
+          receiverMobile:
+            confirmData.receiverMobile ||
+            formData.receiverMobile ||
+            pickString(resData, ["receiverMobile", "receiver_mobile", "receiverPhone"]) ||
+            "",
+          notes: confirmData.notes,
+          networkName: distWallets.find((w: any) => w.key === confirmData.distWallet)?.name || String(confirmData.distWallet || "—"),
+          sentAt: new Date(),
+        })
         setConfirmData(null)
         setShowDialog(false)
         setCommissionResult(null)
@@ -271,51 +305,126 @@ export function RemittanceForm() {
         {/* Left: Main Form / Success Result */}
         <div className="lg:col-span-2">
           {success ? (
-            <Card className="rounded-xl border border-border/60">
-              <CardHeader className="pb-5 border-b border-border/40">
+            <div className="space-y-4">
+              {/* Toolbar — hidden when printing */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
                 <div className="flex items-center gap-3">
                   <div className="icon-container bg-emerald-500/10 text-emerald-600">
                     <CheckCircle2 className="h-5 w-5" />
                   </div>
                   <div>
-                    <CardTitle className="text-lg">تم إرسال الحوالة بنجاح</CardTitle>
-                    <CardDescription>تفاصيل الحوالة</CardDescription>
+                    <h2 className="text-lg font-bold">تم إرسال الحوالة بنجاح</h2>
+                    <p className="text-sm text-muted-foreground">يمكنك طباعة الإيصال أو إرسال حوالة جديدة</p>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  {success.transactionId && (
-                    <div className="dash-stat-card">
-                      <div className="text-xs text-muted-foreground mb-1">رقم العملية</div>
-                      <div className="text-lg font-bold font-mono">{success.transactionId}</div>
-                    </div>
-                  )}
-                  {success.expressid && (
-                    <div className="dash-stat-card">
-                      <div className="text-xs text-muted-foreground mb-1">رقم الحوالة</div>
-                      <div className="text-lg font-bold font-mono">{success.expressid}</div>
-                    </div>
-                  )}
-                  <div className="dash-stat-card">
-                    <div className="text-xs text-muted-foreground mb-1">المبلغ</div>
-                    <div className="text-lg font-bold font-mono">
-                      {success.amount?.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">{success.currency}</span>
-                    </div>
-                  </div>
-                  <div className="dash-stat-card border-emerald-500/20 bg-emerald-50/50">
-                    <div className="text-xs text-muted-foreground mb-1">الحالة</div>
-                    <div className="text-lg font-bold text-emerald-600 font-medium">مكتملة</div>
-                  </div>
-                </div>
-                <Button onClick={handleReset} variant="outline" className="w-full h-11 font-semibold">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={handleReset} className="h-10">
                     <RotateCcw className="h-4 w-4" />
-                    <span>إرسال حوالة جديدة</span>
+                    إرسال حوالة جديدة
+                  </Button>
+                  <Button
+                    onClick={() => window.print()}
+                    className="h-10 font-semibold bg-gradient-to-r from-primary to-emerald-600 hover:to-emerald-700"
+                  >
+                    <Printer className="h-4 w-4" />
+                    طباعة الإيصال
+                  </Button>
+                </div>
+              </div>
+
+              {/* Printable slip — send remittance receipt */}
+              <div className="print-area max-w-2xl mx-auto">
+                <div className="print-slip rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
+                  {/* Boxed header: brand + network | logo */}
+                  <div className="border-b-2 border-dashed border-border/40 bg-muted/30 px-4 py-3 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-base font-extrabold text-primary leading-tight">شمول كاش — وكيل</p>
+                      <p className="text-[11px] font-bold text-muted-foreground mt-0.5">
+                        الشبكة: <span className="font-semibold text-foreground">{success.networkName || "—"}</span>
+                      </p>
+                    </div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/logo.png" alt="شمول كاش" className="h-10 w-10 object-contain shrink-0" />
                   </div>
-                </Button>
-              </CardContent>
-            </Card>
+
+                  {/* Document body */}
+                  <div className="p-4 space-y-3">
+                    {/* Banner divider */}
+                    <div className="flex items-center gap-2">
+                      <div className="h-1 flex-1 bg-primary rounded-full" />
+                      <span className="text-xs font-extrabold text-primary">إيصال إرسال حوالة</span>
+                      <div className="h-1 flex-1 bg-primary rounded-full" />
+                    </div>
+
+                    {/* IDs (right, 2 rows) + Amount (left, compact) */}
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-bold text-muted-foreground">
+                          رقم الحوالة:{" "}
+                          <span className="text-sm font-extrabold font-mono text-foreground" dir="ltr">
+                            {success.expressid || "—"}
+                          </span>
+                        </p>
+                        <p className="text-[11px] font-bold text-muted-foreground">
+                          رقم العملية:{" "}
+                          <span className="text-sm font-extrabold font-mono text-foreground" dir="ltr">
+                            {success.transactionId ? `#${success.transactionId}` : "—"}
+                          </span>
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                          <Coins className="h-4 w-4" />
+                        </span>
+                        <div>
+                          <p className="text-[10px] font-bold text-primary leading-tight">المبلغ المُرسل</p>
+                          <p className="whitespace-nowrap font-mono text-base font-extrabold text-foreground leading-tight" dir="ltr">
+                            {success.amount?.toLocaleString()}{" "}
+                            <span className="text-[10px] font-bold text-muted-foreground">{success.currency}</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Content card: sender / receiver sections */}
+                    <div className="rounded-lg border border-border/40 bg-muted/40 p-3">
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        <div className="rounded-lg border border-border/40 bg-card p-2.5">
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-primary mb-1">
+                            <User className="h-3.5 w-3.5" /> المرسل
+                          </div>
+                          <p className="text-sm font-semibold text-foreground">{success.senderName || "—"}</p>
+                          <p className="text-xs font-mono font-semibold text-foreground mt-0.5" dir="ltr">
+                            {success.senderMobile || "—"}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-border/40 bg-card p-2.5">
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-primary mb-1">
+                            <User className="h-3.5 w-3.5" /> المستلم
+                          </div>
+                          <p className="text-sm font-semibold text-foreground">{success.receiverName || "—"}</p>
+                          <p className="text-xs font-mono font-semibold text-foreground mt-0.5" dir="ltr">
+                            {success.receiverMobile || "—"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Document footer: agent + note + date/time */}
+                  <div className="border-t-2 border-dashed border-border/40 px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[11px] text-muted-foreground">
+                    <span>
+                      تم الإرسال بواسطة: <span className="font-semibold text-foreground">{agentName}</span>
+                    </span>
+                    <span>هذا الإيصال سند إثبات لعملية الإرسال</span>
+                    <span className="font-mono font-semibold text-foreground text-[10px] whitespace-nowrap shrink-0" dir="ltr">
+                      {formatDate(success.sentAt)} · {formatTime(success.sentAt)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : (
             <Card className="rounded-xl border border-border/60">
             <CardHeader className="pb-5 border-b border-border/40 bg-gradient-to-br from-primary/5 via-primary/[0.08] to-transparent">

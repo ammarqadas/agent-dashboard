@@ -45,7 +45,7 @@ export function AgentAccount() {
     try {
       const accountResponse = await apiClient.getAgentAccount()
 
-      const stored = JSON.parse(localStorage.getItem("agentUser") || "{}")
+      const stored = JSON.parse(sessionStorage.getItem("agentUser") || "{}")
       setAgentInfo(stored)
 
       if (accountResponse.success) {

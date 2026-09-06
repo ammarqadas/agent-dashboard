@@ -35,28 +35,30 @@ export default function DashboardLayout({
   const [sheetOpen, setSheetOpen] = useState(false)
 
   useEffect(() => {
-    // Check authentication
-    const isAuthenticated = localStorage.getItem("isAuthenticated")
-    if (isAuthenticated !== "true") {
-      router.push("/")
-      return
-    }
-    
-    // Get agent name from localStorage
-    try {
-      const agentUser = JSON.parse(localStorage.getItem("agentUser") || "{}")
-      setAgentName(agentUser.name || "وكيل")
-    } catch {
-      setAgentName("وكيل")
+    let cancelled = false
+    // Server-readable session check (defense-in-depth; middleware also gates
+    // this route). HttpOnly cookie cannot be inspected from JS.
+    apiClient.getSession().then((session) => {
+      if (cancelled) return
+      if (!session.authenticated) {
+        router.replace("/")
+        return
+      }
+      try {
+        const agentUser = JSON.parse(sessionStorage.getItem("agentUser") || "{}")
+        setAgentName(agentUser.name || "وكيل")
+      } catch {
+        setAgentName("وكيل")
+      }
+    })
+    return () => {
+      cancelled = true
     }
   }, [router])
 
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated")
-    localStorage.removeItem("agentToken")
-    localStorage.removeItem("agentUser")
-    apiClient.clearToken()
-    router.push("/")
+  const handleLogout = async () => {
+    await apiClient.logout()
+    router.replace("/")
   }
 
   // Get current page title (prefer exact match first)
@@ -72,14 +74,14 @@ export default function DashboardLayout({
     <div className="min-h-screen bg-background">
       <div className="flex min-h-screen w-full">
         {/* Desktop sidebar */}
-        <aside className="hidden w-72 border-l bg-card md:flex md:flex-col shadow-sm">
+        <aside className="hidden w-72 border-l bg-card md:flex md:flex-col shadow-sm print:hidden">
           <SidebarNav className="h-full" />
         </aside>
 
         {/* Main content */}
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Header */}
-          <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+          <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 print:hidden">
             <div className="flex h-16 items-center gap-4 px-4 md:px-6">
               {/* Mobile sidebar toggle */}
               <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -122,7 +124,7 @@ export default function DashboardLayout({
           </header>
 
           {/* Main content area */}
-          <main className="flex-1 py-4 px-2 md:py-6 md:px-3 lg:py-8 lg:px-4">
+          <main className="flex-1 py-4 px-2 md:py-6 md:px-3 lg:py-8 lg:px-4 print:p-0">
             <div className="mx-auto max-w-full">
               {children}
             </div>

@@ -32,8 +32,8 @@ export function LoginForm() {
       const response = await apiClient.agentLogin(email, password)
 
       if (response.success) {
-        localStorage.setItem("isAuthenticated", "true")
-        localStorage.setItem("agentUser", JSON.stringify(response.user || response.data))
+        // Session is an HttpOnly cookie set by the server; display info is
+        // stored in sessionStorage by apiClient.agentLogin.
         router.push("/dashboard")
       } else {
         setError(response.message || "البريد الإلكتروني أو كلمة المرور غير صحيحة")

@@ -3,16 +3,22 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { LoginForm } from "@/components/login-form"
+import { apiClient } from "@/lib/api"
 import { Phone } from "lucide-react"
 
 export default function Home() {
   const router = useRouter()
 
   useEffect(() => {
-    // Check if user is already authenticated
-    const isAuthenticated = localStorage.getItem("isAuthenticated")
-    if (isAuthenticated === "true") {
-      router.push("/dashboard")
+    // Server-readable session check (HttpOnly cookie, cannot be inspected here)
+    let cancelled = false
+    apiClient.getSession().then((session) => {
+      if (!cancelled && session.authenticated) {
+        router.replace("/dashboard")
+      }
+    })
+    return () => {
+      cancelled = true
     }
   }, [router])
 

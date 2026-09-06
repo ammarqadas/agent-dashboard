@@ -1,31 +1,40 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { FileImage } from "lucide-react"
 import { apiClient } from "@/lib/api"
+import { IdentityImageGallery, collectStoredIdentityImages } from "@/components/identity"
 import { useRouter } from "next/navigation"
 
 interface WalletViewProps {
   wallet: any
-  showActions?: boolean
+  onActivated?: () => void
+  showDetails?: boolean
 }
 
-export function WalletView({ wallet, showActions = true }: WalletViewProps) {
+export function WalletView({ wallet, onActivated, showDetails = true }: WalletViewProps) {
   const router = useRouter()
   const [isUpdating, setIsUpdating] = useState(false)
   const [walletData, setWalletData] = useState(wallet)
+
+  // Stay in sync when the parent reloads the wallet (e.g. after identity save).
+  useEffect(() => setWalletData(wallet), [wallet])
 
   const walletId = walletData.id || walletData._id
   const walletName = walletData.name || "N/A"
   const walletMobile = walletData.mobile || "N/A"
   const isActive = walletData.active !== false
+  const storedImages = collectStoredIdentityImages(walletData?.card)
+
   const handleActivate = async () => {
     setIsUpdating(true)
     try {
       const response = await apiClient.updateWallet(walletId, { active: true })
       if (response.success) {
         setWalletData((prev: any) => ({ ...prev, active: true }))
+        onActivated?.()
       }
     } catch (err) {
       console.error("Failed to activate wallet:", err)
@@ -64,27 +73,32 @@ export function WalletView({ wallet, showActions = true }: WalletViewProps) {
           </div>
         </div>
 
-        {showActions && (
-          <div className="flex flex-wrap gap-2 pt-2">
-            {!isActive && (
-              <Button
-                onClick={handleActivate}
-                disabled={isUpdating}
-                variant="default"
-              >
-                {isUpdating ? "جاري التفعيل..." : "تفعيل المحفظة"}
-              </Button>
-            )}
+        {storedImages.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <FileImage className="h-4 w-4 text-primary" />
+              صور الهوية
+            </h3>
+            <IdentityImageGallery images={storedImages} columns={3} />
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 pt-2">
+          {!isActive && (
+            <Button onClick={handleActivate} disabled={isUpdating} variant="default">
+              {isUpdating ? "جاري التفعيل..." : "تفعيل المحفظة"}
+            </Button>
+          )}
+          {showDetails && (
             <Button
               variant="outline"
               onClick={() => router.push(`/dashboard/wallet/${walletId}`)}
             >
               عرض التفاصيل
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   )
 }
-

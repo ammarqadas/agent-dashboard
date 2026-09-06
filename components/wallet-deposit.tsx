@@ -22,13 +22,133 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import {   CheckCircle2, Wallet, Smartphone, Coins, Loader2, Banknote, Send, FileText, ArrowLeft, X } from "lucide-react"
+import {   CheckCircle2, Wallet, Smartphone, Coins, Loader2, Banknote, Send, FileText, Printer, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
+import { formatDate, formatTime } from "@/lib/utils"
 
 interface WalletDepositProps {
   mobile?: string
   onSuccess?: () => void
+}
+
+type DepositSuccess = {
+  amount: string
+  currencyCode: string
+  mobile: string
+  notes?: string
+  txId?: string
+  agentName: string
+  paidAt: Date
+}
+
+// ─── Compact one-column cashier deposit receipt ───────────────────────
+
+function DepositReceipt({ success, onDismiss }: { success: DepositSuccess; onDismiss: () => void }) {
+  return (
+    <div className="space-y-4">
+      {/* Toolbar — hidden when printing */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="icon-container bg-emerald-500/10 text-emerald-600">
+            <CheckCircle2 className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold">تم الإيداع بنجاح</h2>
+            <p className="text-sm text-muted-foreground">يمكنك طباعة الإيصال أو إيداع جديد</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={onDismiss} className="h-10">
+            <RotateCcw className="h-4 w-4" />
+            إيداع جديد
+          </Button>
+          <Button
+            onClick={() => window.print()}
+            className="h-10 font-semibold bg-gradient-to-r from-primary to-emerald-600 hover:to-emerald-700"
+          >
+            <Printer className="h-4 w-4" />
+            طباعة الإيصال
+          </Button>
+        </div>
+      </div>
+
+      {/* Printable slip — compact cashier invoice */}
+      <div className="print-area max-w-sm mx-auto">
+        <div className="print-slip rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
+          {/* Boxed header: brand + wallet | logo */}
+          <div className="border-b-2 border-dashed border-border/40 bg-muted/30 px-4 py-3 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-extrabold text-primary leading-tight">شمول كاش — وكيل</p>
+              <p className="text-[11px] font-bold text-muted-foreground mt-0.5">
+                المحفظة:{" "}
+                <span className="font-mono font-semibold text-foreground" dir="ltr">
+                  {success.mobile}
+                </span>
+              </p>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="شمول كاش" className="h-10 w-10 object-contain shrink-0" />
+          </div>
+
+          {/* Body — one column */}
+          <div className="p-4 space-y-3">
+            {/* Banner divider */}
+            <div className="flex items-center gap-2">
+              <div className="h-1 flex-1 bg-primary rounded-full" />
+              <span className="text-[11px] font-extrabold text-primary">إيصال إيداع نقدي</span>
+              <div className="h-1 flex-1 bg-primary rounded-full" />
+            </div>
+
+            {/* Amount — compact tinted box */}
+            <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                  <Coins className="h-4 w-4" />
+                </span>
+                <span className="text-[10px] font-bold text-primary">المبلغ المُودع</span>
+              </div>
+              <p className="whitespace-nowrap font-mono text-lg font-extrabold text-foreground mt-1" dir="ltr">
+                {success.amount}{" "}
+                <span className="text-[10px] font-bold text-muted-foreground">{success.currencyCode}</span>
+              </p>
+            </div>
+
+            {/* Rows */}
+            <div className="rounded-lg border border-border/40 bg-card px-3 divide-y divide-border/40">
+              <div className="flex items-center justify-between gap-4 py-2">
+                <span className="text-[11px] font-bold text-muted-foreground">المحفظة</span>
+                <span className="text-sm font-mono font-semibold text-foreground" dir="ltr">{success.mobile}</span>
+              </div>
+              {success.txId && (
+                <div className="flex items-center justify-between gap-4 py-2">
+                  <span className="text-[11px] font-bold text-muted-foreground">رقم العملية</span>
+                  <span className="text-sm font-mono font-semibold text-foreground" dir="ltr">{success.txId}</span>
+                </div>
+              )}
+              {success.notes && (
+                <div className="flex items-start justify-between gap-4 py-2">
+                  <span className="text-[11px] font-bold text-muted-foreground shrink-0">ملاحظات</span>
+                  <span className="text-xs font-semibold text-foreground text-left">{success.notes}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="border-t-2 border-dashed border-border/40 px-4 py-2 space-y-0.5 text-center text-[10px] text-muted-foreground">
+            <p>
+              تم الإيداع بواسطة: <span className="font-semibold text-foreground">{success.agentName}</span>
+            </p>
+            <p>هذا الإيصال سند إثبات لعملية الإيداع</p>
+            <p className="font-mono font-semibold text-foreground whitespace-nowrap" dir="ltr">
+              {formatDate(success.paidAt)} · {formatTime(success.paidAt)}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositProps) {
@@ -37,11 +157,21 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
   const [currency, setCurrency] = useState("")
   const [notes, setNotes] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [success, setSuccess] = useState<{ amount: string; currencyCode: string; mobile: string } | null>(null)
+  const [success, setSuccess] = useState<DepositSuccess | null>(null)
+  const [agentName, setAgentName] = useState("وكيل")
   const [currencies, setCurrencies] = useState<any[]>([])
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [mobileError, setMobileError] = useState("")
   const [isCurrenciesLoading, setIsCurrenciesLoading] = useState(true)
+
+  useEffect(() => {
+    try {
+      const agentUser = JSON.parse(sessionStorage.getItem("agentUser") || "{}")
+      setAgentName(agentUser.name || "وكيل")
+    } catch {
+      setAgentName("وكيل")
+    }
+  }, [])
 
   useEffect(() => {
     const fetchCurrencies = async () => {
@@ -123,19 +253,23 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
 
       if (depositSuccess) {
         const currencyCode = getCurrencyCode()
+        const raw: any = depositResult || {}
+        const rawTxId = raw.transactionId ?? raw.txId ?? raw.id ?? raw.reference
 
         setSuccess({
           amount: amountNum.toFixed(2),
           currencyCode,
           mobile: normMobile,
+          notes: notes || undefined,
+          txId: rawTxId != null && rawTxId !== "" ? String(rawTxId) : undefined,
+          agentName,
+          paidAt: new Date(),
         })
 
         if (!propMobile) setMobile("")
         setAmount("")
         setCurrency("")
         setNotes("")
-
-        setTimeout(() => setSuccess(null), 8000)
 
         if (onSuccess) onSuccess()
       } else {
@@ -149,27 +283,12 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
     }
   }
 
+  if (success) {
+    return <DepositReceipt success={success} onDismiss={() => setSuccess(null)} />
+  }
+
   return (
     <>
-      {success && (
-        <div className="relative text-center mb-4 rounded-xl border border-emerald-500/40 bg-emerald-50 p-5">
-          <button
-            onClick={() => setSuccess(null)}
-            className="absolute left-2 top-2 text-emerald-600 hover:text-emerald-800 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-          <CheckCircle2 className="h-6 w-6 mx-auto text-emerald-600" />
-          <div className="mt-2">
-            <p className="font-semibold text-emerald-700">تم الإيداع بنجاح</p>
-            <p className="text-emerald-600 text-sm mt-1">
-              {success.amount} {success.currencyCode}
-              <ArrowLeft className="h-3 w-3 inline mx-1" />
-              <span dir="ltr">{success.mobile}</span>
-            </p>
-          </div>
-        </div>
-      )}
       <Card className="rounded-xl border border-border/60">
       <CardHeader className="pb-6 border-b border-border/40 bg-gradient-to-br from-primary/5 via-primary/[0.08] to-transparent">
         <div className="flex items-center justify-between">
