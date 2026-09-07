@@ -1320,12 +1320,13 @@ interface AllowedNetwork {
 
 | Variable | Scope | Required | Description |
 |----------|-------|----------|-------------|
-| `DADIH_API_URL` | Server-only | yes | Base URL of the dadih-server backend (e.g. `http://localhost:3000/api`) |
+| `DADIH_API_URL` | Server-only | yes | Base URL of the dadih-server backend (e.g. `https://api.example.com/api`) |
+| `DADIH_ALLOW_HTTP` | Server-only | no | Set to `true` only for a trusted private HTTP backend in production. |
 | `NEXT_PUBLIC_API_URL` | Client + Server | no | Client-side API base. Set to `/api/proxy` (default) to route through the Next.js proxy |
 
 ### Notes
 
-- `DADIH_API_URL` **must** be set in production (Vercel, Docker, etc.). The proxy returns a `500` error if it is missing.
+- `DADIH_API_URL` **must** be set in production (Vercel, Docker, etc.). HTTPS is required unless `DADIH_ALLOW_HTTP=true` explicitly permits a trusted private HTTP backend. The proxy returns a `500` error when its upstream configuration is invalid.
 - In development, both variables can point to the same backend (`http://localhost:3000/api`), though the client will still use `/api/proxy`.
 - The client automatically falls back to `/api/proxy` if `NEXT_PUBLIC_API_URL` points to a cross-origin URL, preventing browser CORS failures.
 

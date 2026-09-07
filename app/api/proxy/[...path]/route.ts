@@ -30,6 +30,7 @@ export const maxDuration = 100
 // ---------------------------------------------------------------------------
 
 const UPSTREAM = process.env.DADIH_API_URL?.trim().replace(/\/+$/, '')
+const ALLOW_HTTP_UPSTREAM = process.env.DADIH_ALLOW_HTTP === 'true'
 const UPSTREAM_TIMEOUT_MS = 30_000
 const configuredPayoutTimeout = Number(process.env.PAYOUT_UPSTREAM_TIMEOUT_MS ?? 60_000)
 const PAYOUT_UPSTREAM_TIMEOUT_MS =
@@ -51,10 +52,12 @@ if (!UPSTREAM) {
 } else {
   try {
     const u = new URL(UPSTREAM)
-    const isLocal =
-      u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1'
-    if (IS_PROD && u.protocol !== 'https:' && !isLocal) {
-      console.error('CONFIG ERROR: DADIH_API_URL must use HTTPS in production. Requests are blocked.')
+    if (!['http:', 'https:'].includes(u.protocol)) {
+      console.error('CONFIG ERROR: DADIH_API_URL must use HTTP or HTTPS. Requests are blocked.')
+    } else if (IS_PROD && u.protocol !== 'https:' && !ALLOW_HTTP_UPSTREAM) {
+      console.error(
+        'CONFIG ERROR: DADIH_API_URL must use HTTPS in production unless DADIH_ALLOW_HTTP=true. Requests are blocked.'
+      )
     } else {
       upstreamBlocked = false
     }
