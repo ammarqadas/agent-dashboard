@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { apiClient } from "@/lib/api"
@@ -166,27 +167,28 @@ export function AgentAccount() {
                 const currencyObj = account.currency
                 let currencyCode: string | null = null
                 let currencyName: string | null = null
+                let currencyId: string | null = null
 
                 if (currencyObj && typeof currencyObj === "object") {
                   const idKey = currencyObj.id != null ? String(currencyObj.id) : undefined
+                  if (idKey) currencyId = idKey
                   const mapped = idKey ? currencyMap[idKey] : undefined
                   currencyCode = mapped || currencyObj.code || currencyObj.symbol || (idKey ? `#${idKey}` : null)
                   currencyName = currencyObj.name || null
                 } else if (currencyObj != null) {
                   const key = String(currencyObj)
+                  currencyId = key
                   currencyCode = currencyMap[key] || key
                 }
 
-                return (
-                  <div 
-                    key={account.id} 
-                    className="stat-card"
-                  >
+                const cardClassName = `stat-card ${currencyId ? "transition-colors hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : ""}`
+                const cardInner = (
+                  <>
                     <div className="flex items-start justify-between mb-3">
                       <div className="icon-container">
                         <Wallet className="h-4 w-4" />
                       </div>
-                      <Badge 
+                      <Badge
                         variant="outline"
                         className={account.active ? "badge-success" : "bg-muted text-muted-foreground"}
                       >
@@ -223,7 +225,32 @@ export function AgentAccount() {
                           <p className="font-mono text-xs" dir="ltr">{account.code}</p>
                         </div>
                       )}
+                      {currencyId && (
+                        <p className="pt-2 text-xs font-medium text-primary">عرض كشف الحساب ←</p>
+                      )}
                     </div>
+                  </>
+                )
+
+                if (currencyId) {
+                  return (
+                    <Link
+                      key={account.id}
+                      href={`/dashboard/transactions?currencyId=${encodeURIComponent(currencyId)}`}
+                      className={cardClassName}
+                      aria-label={`عرض كشف حساب ${account.name || ""}`}
+                    >
+                      {cardInner}
+                    </Link>
+                  )
+                }
+
+                return (
+                  <div
+                    key={account.id}
+                    className={cardClassName}
+                  >
+                    {cardInner}
                   </div>
                 )
               })}

@@ -140,7 +140,7 @@ export function SidebarNav({
       {/* Footer */}
       <div className="px-4 py-4 border-t">
         <div className="rounded-lg bg-muted/50 p-3 text-center">
-          <p className="text-xs text-muted-foreground">شمول كاش v1.0</p>
+          <p className="text-xs text-muted-foreground">شمول كاش v2.0</p>
         </div>
       </div>
     </div>

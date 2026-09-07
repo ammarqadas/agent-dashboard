@@ -3,13 +3,11 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
-RUN \
-  if [ -f pnpm-lock.yaml ]; then npm install -g pnpm && pnpm i --frozen-lockfile; \
-  elif [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Global pnpm: the packageManager field makes pnpm >=9.7 self-switch to the
+# project-pinned version, so any global install stays compatible.
+RUN npm install -g pnpm && pnpm install --frozen-lockfile
 
 # ── Stage 2: builder ───────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
@@ -22,12 +20,7 @@ COPY . .
 ENV NEXT_PUBLIC_API_URL=/api/proxy
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN \
-  if [ -f pnpm-lock.yaml ]; then npm install -g pnpm && pnpm run build; \
-  elif [ -f yarn.lock ]; then yarn build; \
-  elif [ -f package-lock.json ]; then npm run build; \
-  else npm run build; \
-  fi
+RUN npm install -g pnpm && pnpm run build
 
 # ── Stage 3: runner ────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,7 +25,8 @@ import {
 import { CheckCircle2, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle, RotateCcw, FileText, Send, X, Printer } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
-import { formatDate, formatTime, pickString } from "@/lib/utils"
+import { formatReceiptTimestamp, pickString } from "@/lib/utils"
+import { SharePdfButton } from "@/components/receipt/share-pdf-button"
 
 export function RemittanceForm() {
   const [formData, setFormData] = useState({
@@ -44,6 +45,7 @@ export function RemittanceForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState<any>(null)
   const [successDismissed, setSuccessDismissed] = useState(false)
+  const receiptSlipRef = useRef<HTMLDivElement>(null)
   const [agentName, setAgentName] = useState("وكيل")
   const [isFetchingCommission, setIsFetchingCommission] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
@@ -329,12 +331,16 @@ export function RemittanceForm() {
                     <Printer className="h-4 w-4" />
                     طباعة الإيصال
                   </Button>
+                  <SharePdfButton
+                    slipRef={receiptSlipRef}
+                    filename={`send-remittance-${success.expressid || success.transactionId || "receipt"}`}
+                  />
                 </div>
               </div>
 
               {/* Printable slip — send remittance receipt */}
               <div className="print-area max-w-2xl mx-auto">
-                <div className="print-slip rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
+                <div ref={receiptSlipRef} className="print-slip rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
                   {/* Boxed header: brand + network | logo */}
                   <div className="border-b-2 border-dashed border-border/40 bg-muted/30 px-4 py-3 flex items-center justify-between gap-4">
                     <div>
@@ -412,15 +418,19 @@ export function RemittanceForm() {
                     </div>
                   </div>
 
-                  {/* Document footer: agent + note + date/time */}
-                  <div className="border-t-2 border-dashed border-border/40 px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[11px] text-muted-foreground">
-                    <span>
-                      تم الإرسال بواسطة: <span className="font-semibold text-foreground">{agentName}</span>
-                    </span>
-                    <span>هذا الإيصال سند إثبات لعملية الإرسال</span>
-                    <span className="font-mono font-semibold text-foreground text-[10px] whitespace-nowrap shrink-0" dir="ltr">
-                      {formatDate(success.sentAt)} · {formatTime(success.sentAt)}
-                    </span>
+                  {/* Document footer: agent + timestamp + proof */}
+                  <div className="border-t-2 border-dashed border-border/40 bg-muted/20 px-4 py-2.5 text-[10px] text-muted-foreground">
+                    <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+                      <span>
+                        تم الإرسال عبر الوكيل: <span className="font-semibold text-foreground">{agentName}</span>
+                      </span>
+                      <span className="font-mono font-semibold text-foreground whitespace-nowrap" dir="ltr">
+                        {formatReceiptTimestamp(success.sentAt)}
+                      </span>
+                    </div>
+                    <div className="mt-2 border-t border-border/40 pt-2 text-center">
+                      <span className="font-medium text-muted-foreground">هذا الإيصال سند إثبات لعملية الإرسال</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -685,7 +695,7 @@ export function RemittanceForm() {
         </div>
 
         {/* Right: Preview Sidebar */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 print:hidden">
           <Card className="rounded-xl border border-border/60 lg:sticky lg:top-24">
             <CardHeader className="pb-5 border-b border-border/40">
               <CardTitle className="text-sm flex items-center gap-2">

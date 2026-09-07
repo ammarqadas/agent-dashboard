@@ -1,5 +1,6 @@
 @import "@fontsource/almarai/400.css";
 @import "@fontsource/almarai/700.css";
+@import "@fontsource/almarai/800.css";
 
 @tailwind base;
 @tailwind components;
@@ -285,4 +286,12 @@
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
+}
+
+/* Receipt slips: neutral letter spacing so Arabic glyphs stay properly
+   joined in both print and the html2canvas PDF capture — non-zero
+   letter-spacing makes html2canvas draw Arabic char-by-char. */
+.print-slip,
+.print-slip * {
+  letter-spacing: 0 !important;
 }

@@ -237,7 +237,13 @@ class ApiClient {
   }
 
   // Deposit to wallet
-  async depositToWallet(mobile: string, amount: number, currency: string | number, notes?: string) {
+  async depositToWallet(
+    mobile: string,
+    amount: number,
+    currency: string | number,
+    notes?: string,
+    quote?: { commission: number; totalAmount: number; searchToken: string }
+  ) {
     return this.request('/action/execute-generic', {
       method: 'POST',
       body: JSON.stringify({
@@ -247,7 +253,29 @@ class ApiClient {
           amount,
           currency,
           notes,
+          ...(quote
+            ? {
+                commission: quote.commission,
+                totalAmount: quote.totalAmount,
+                searchToken: quote.searchToken,
+              }
+            : {}),
         },
+      }),
+    })
+  }
+
+  // Deposit pre-submit: wallet lookup confirmation + server commission quote
+  async agentDepositPresubmit(payload: {
+    mobile: string
+    amount: number
+    currency: string | number
+  }) {
+    return this.request('/presubmit/execute', {
+      method: 'POST',
+      body: JSON.stringify({
+        actionKey: 'agent_deposit',
+        payload,
       }),
     })
   }
@@ -443,12 +471,22 @@ class ApiClient {
     page?: number
     limit?: number
     sort?: string
+    currencyId?: string | number
+    from?: string
+    to?: string
+    operation?: string
   }) {
     const params = new URLSearchParams()
     if (filters?.page) params.append('page', String(filters.page))
     if (filters?.limit) params.append('limit', String(filters.limit))
     if (filters?.sort) params.append('sort', filters.sort)
-    return this.request(`/agent/transactions?${params.toString()}`)
+    if (filters?.currencyId != null && String(filters.currencyId) !== '')
+      params.append('currencyId', String(filters.currencyId))
+    if (filters?.from) params.append('from', filters.from)
+    if (filters?.to) params.append('to', filters.to)
+    if (filters?.operation) params.append('operation', filters.operation)
+    const qs = params.toString()
+    return this.request(`/agent/transactions${qs ? `?${qs}` : ''}`)
   }
 
   // Agent account

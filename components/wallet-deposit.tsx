@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,22 +22,42 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import {   CheckCircle2, Wallet, Smartphone, Coins, Loader2, Banknote, Send, FileText, Printer, RotateCcw } from "lucide-react"
+import { CheckCircle2, Wallet, Smartphone, Coins, Loader2, Banknote, Send, FileText, Printer, RotateCcw, Receipt } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
-import { formatDate, formatTime } from "@/lib/utils"
+import { SharePdfButton } from "@/components/receipt/share-pdf-button"
+import { formatReceiptTimestamp } from "@/lib/utils"
 
 interface WalletDepositProps {
   mobile?: string
   onSuccess?: () => void
 }
 
+type DepositQuote = {
+  totalCommission: number
+  totalAmount: number
+  searchToken: string
+}
+
+type DepositConfirmData = {
+  mobile: string
+  walletName?: string
+  amount: number
+  currencyId: string
+  currencyCode: string
+  notes?: string
+  quote: DepositQuote
+}
+
 type DepositSuccess = {
   amount: string
   currencyCode: string
   mobile: string
+  walletName?: string
   notes?: string
   txId?: string
+  commission?: number
+  totalAmount?: number
   agentName: string
   paidAt: Date
 }
@@ -45,6 +65,7 @@ type DepositSuccess = {
 // ─── Compact one-column cashier deposit receipt ───────────────────────
 
 function DepositReceipt({ success, onDismiss }: { success: DepositSuccess; onDismiss: () => void }) {
+  const receiptSlipRef = useRef<HTMLDivElement>(null)
   return (
     <div className="space-y-4">
       {/* Toolbar — hidden when printing */}
@@ -70,22 +91,21 @@ function DepositReceipt({ success, onDismiss }: { success: DepositSuccess; onDis
             <Printer className="h-4 w-4" />
             طباعة الإيصال
           </Button>
+          <SharePdfButton
+            slipRef={receiptSlipRef}
+            filename={`deposit-${success.txId || success.mobile || "receipt"}`}
+          />
         </div>
       </div>
 
       {/* Printable slip — compact cashier invoice */}
       <div className="print-area max-w-sm mx-auto">
-        <div className="print-slip rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
-          {/* Boxed header: brand + wallet | logo */}
+        <div ref={receiptSlipRef} className="print-slip rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
+          {/* Boxed header: brand only */}
           <div className="border-b-2 border-dashed border-border/40 bg-muted/30 px-4 py-3 flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-extrabold text-primary leading-tight">شمول كاش — وكيل</p>
-              <p className="text-[11px] font-bold text-muted-foreground mt-0.5">
-                المحفظة:{" "}
-                <span className="font-mono font-semibold text-foreground" dir="ltr">
-                  {success.mobile}
-                </span>
-              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">إيصال عملية مالية</p>
             </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="شمول كاش" className="h-10 w-10 object-contain shrink-0" />
@@ -101,25 +121,46 @@ function DepositReceipt({ success, onDismiss }: { success: DepositSuccess; onDis
             </div>
 
             {/* Amount — compact tinted box */}
-            <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                  <Coins className="h-4 w-4" />
-                </span>
-                <span className="text-[10px] font-bold text-primary">المبلغ المُودع</span>
+            <div className="mx-auto flex min-h-[42px] w-full max-w-[180px] items-center justify-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Coins className="h-4 w-4" />
+              </span>
+              <div className="text-center">
+                <p className="whitespace-nowrap font-mono text-lg font-extrabold leading-none text-foreground" dir="ltr">
+                  {success.amount}{" "}
+                  <span className="text-[10px] font-bold text-muted-foreground">{success.currencyCode}</span>
+                </p>
               </div>
-              <p className="whitespace-nowrap font-mono text-lg font-extrabold text-foreground mt-1" dir="ltr">
-                {success.amount}{" "}
-                <span className="text-[10px] font-bold text-muted-foreground">{success.currencyCode}</span>
-              </p>
             </div>
 
             {/* Rows */}
             <div className="rounded-lg border border-border/40 bg-card px-3 divide-y divide-border/40">
+              {success.walletName && (
+                <div className="flex items-center justify-between gap-4 py-2">
+                  <span className="text-[11px] font-bold text-muted-foreground">صاحب المحفظة</span>
+                  <span className="text-sm font-semibold text-foreground">{success.walletName}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-4 py-2">
-                <span className="text-[11px] font-bold text-muted-foreground">المحفظة</span>
+                <span className="text-[11px] font-bold text-muted-foreground">رقم المحفظة</span>
                 <span className="text-sm font-mono font-semibold text-foreground" dir="ltr">{success.mobile}</span>
               </div>
+              {success.commission != null && success.commission > 0 && (
+                <div className="flex items-center justify-between gap-4 py-2">
+                  <span className="text-[11px] font-bold text-muted-foreground">العمولة</span>
+                  <span className="text-sm font-mono font-semibold text-foreground" dir="ltr">
+                    {success.commission.toLocaleString()} {success.currencyCode}
+                  </span>
+                </div>
+              )}
+              {success.totalAmount != null && (
+                <div className="flex items-center justify-between gap-4 py-2">
+                  <span className="text-[11px] font-bold text-muted-foreground">الإجمالي المخصوم</span>
+                  <span className="text-sm font-mono font-semibold text-foreground" dir="ltr">
+                    {success.totalAmount.toLocaleString()} {success.currencyCode}
+                  </span>
+                </div>
+              )}
               {success.txId && (
                 <div className="flex items-center justify-between gap-4 py-2">
                   <span className="text-[11px] font-bold text-muted-foreground">رقم العملية</span>
@@ -136,14 +177,18 @@ function DepositReceipt({ success, onDismiss }: { success: DepositSuccess; onDis
           </div>
 
           {/* Footer */}
-          <div className="border-t-2 border-dashed border-border/40 px-4 py-2 space-y-0.5 text-center text-[10px] text-muted-foreground">
-            <p>
-              تم الإيداع بواسطة: <span className="font-semibold text-foreground">{success.agentName}</span>
-            </p>
-            <p>هذا الإيصال سند إثبات لعملية الإيداع</p>
-            <p className="font-mono font-semibold text-foreground whitespace-nowrap" dir="ltr">
-              {formatDate(success.paidAt)} · {formatTime(success.paidAt)}
-            </p>
+          <div className="border-t-2 border-dashed border-border/40 bg-muted/20 px-4 py-2.5 text-[10px] text-muted-foreground">
+            <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+              <p>
+                تم الإيداع عبر الوكيل: <span className="font-semibold text-foreground">{success.agentName}</span>
+              </p>
+              <p className="font-mono font-semibold text-foreground whitespace-nowrap" dir="ltr">
+                {formatReceiptTimestamp(success.paidAt)}
+              </p>
+            </div>
+            <div className="mt-2 border-t border-border/40 pt-2 text-center">
+              <p className="font-medium text-muted-foreground">هذا الإيصال سند إثبات لعملية الإيداع</p>
+            </div>
           </div>
         </div>
       </div>
@@ -163,6 +208,8 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [mobileError, setMobileError] = useState("")
   const [isCurrenciesLoading, setIsCurrenciesLoading] = useState(true)
+  const [isChecking, setIsChecking] = useState(false)
+  const [confirmData, setConfirmData] = useState<DepositConfirmData | null>(null)
 
   useEffect(() => {
     try {
@@ -192,7 +239,7 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
 
   const normalizeMobile = (mob: string) => {
     if (!mob) return mob
-    const clean = mob.replace(/^\+?966/, "").replace(/^0/, "")
+    const clean = mob.replace(/^\+?967/, "").replace(/^0/, "")
     if (/^7\d{8}$/.test(clean)) return clean
     return mob
   }
@@ -210,7 +257,9 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
     return found?.code || currency
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Request the server quote before confirmation is allowed. The presubmit
+  // action validates the wallet and returns the one-time search token.
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setMobileError("")
 
@@ -231,20 +280,57 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
       return
     }
 
-    setShowConfirmDialog(true)
+    const normMobile = normalizeMobile(propMobile || mobile)
+    setIsChecking(true)
+
+    try {
+      // Server commission quote and wallet validation (pre-submit).
+      const presubRes: any = await apiClient.agentDepositPresubmit({
+        mobile: normMobile,
+        amount: amountNum,
+        currency,
+      })
+      const presubData = presubRes?.data || presubRes || {}
+      const searchToken = presubData.searchToken
+      if (!presubRes?.success || !searchToken) {
+        toast.error(presubRes?.message || "تعذر احتساب العمولة — حاول من جديد")
+        return
+      }
+      const totalCommission = Number(presubData.totalCommission ?? presubData.commission ?? 0)
+      const totalAmount = Number(presubData.totalAmount ?? presubData.total ?? amountNum)
+      const walletName = typeof presubData.walletName === "string" ? presubData.walletName : undefined
+
+      setConfirmData({
+        mobile: normMobile,
+        walletName,
+        amount: amountNum,
+        currencyId: currency,
+        currencyCode: getCurrencyCode(),
+        notes: notes || undefined,
+        quote: { totalCommission, totalAmount, searchToken },
+      })
+      setShowConfirmDialog(true)
+    } catch (err: any) {
+      toast.error(err?.message || "حدث خطأ أثناء تجهيز الإيداع — حاول من جديد")
+    } finally {
+      setIsChecking(false)
+    }
   }
 
   const handleConfirmDeposit = async () => {
+    if (!confirmData) return
     setIsLoading(true)
     try {
-      const amountNum = parseFloat(amount)
-      const normMobile = normalizeMobile(propMobile || mobile)
-
       const response = await apiClient.depositToWallet(
-        normMobile,
-        amountNum,
-        currency,
-        notes || undefined
+        confirmData.mobile,
+        confirmData.amount,
+        confirmData.currencyId,
+        confirmData.notes,
+        {
+          commission: confirmData.quote.totalCommission,
+          totalAmount: confirmData.quote.totalAmount,
+          searchToken: confirmData.quote.searchToken,
+        }
       )
 
       const results = (response as any).data?.results
@@ -252,16 +338,18 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
       const depositSuccess = depositResult ? depositResult.success : response.success
 
       if (depositSuccess) {
-        const currencyCode = getCurrencyCode()
         const raw: any = depositResult || {}
         const rawTxId = raw.transactionId ?? raw.txId ?? raw.id ?? raw.reference
 
         setSuccess({
-          amount: amountNum.toFixed(2),
-          currencyCode,
-          mobile: normMobile,
-          notes: notes || undefined,
+          amount: confirmData.amount.toFixed(2),
+          currencyCode: confirmData.currencyCode,
+          mobile: confirmData.mobile,
+          walletName: confirmData.walletName,
+          notes: confirmData.notes,
           txId: rawTxId != null && rawTxId !== "" ? String(rawTxId) : undefined,
+          commission: confirmData.quote.totalCommission,
+          totalAmount: confirmData.quote.totalAmount,
           agentName,
           paidAt: new Date(),
         })
@@ -270,6 +358,8 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
         setAmount("")
         setCurrency("")
         setNotes("")
+        setMobileError("")
+        setConfirmData(null)
 
         if (onSuccess) onSuccess()
       } else {
@@ -309,19 +399,18 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-5">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Section 1: Recipient */}
-          <div className="form-section">
-            <div className="form-section-title">
-              <Smartphone className="h-4 w-4" />
-              1. بيانات المستلم
+      <CardContent className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Recipient and amount are reviewed together before deposit. */}
+          <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+              <Banknote className="h-4 w-4 text-primary" />
+              بيانات الإيداع
             </div>
-            {!propMobile && (
-              <div className="form-field">
-                <Label htmlFor="mobile" className="text-sm font-medium">رقم الجوال</Label>
-                <div className="flex rounded-lg overflow-hidden border border-input">
-                  
+            <div className={`grid gap-3 ${propMobile ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
+              {!propMobile && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="mobile" className="text-sm font-medium">رقم الجوال</Label>
                   <Input
                     id="mobile"
                     type="tel"
@@ -333,25 +422,12 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
                     }}
                     required
                     dir="ltr"
-                    className="rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                   />
-                  
+                  {mobileError && <p className="text-xs text-destructive">{mobileError}</p>}
                 </div>
-                {mobileError && (
-                  <p className="text-xs text-destructive mt-1">{mobileError}</p>
-                )}
-              </div>
-            )}
-          </div>
+              )}
 
-          {/* Section 2: Amount */}
-          <div className="form-section">
-            <div className="form-section-title">
-              <Banknote className="h-4 w-4" />
-              2. تفاصيل المبلغ
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="form-field">
+              <div className="space-y-1.5">
                 <Label htmlFor="amount" className="text-sm font-medium">المبلغ</Label>
                 <div className="input-icon-wrapper">
                   <Coins className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
@@ -370,7 +446,7 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
                 </div>
               </div>
 
-              <div className="form-field">
+              <div className="space-y-1.5">
                 <Label htmlFor="currency" className="text-sm font-medium">العملة</Label>
                 <Select value={currency} onValueChange={setCurrency} required>
                   <SelectTrigger className="text-right [&>span]:text-right">
@@ -392,49 +468,43 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
                   </SelectContent>
                 </Select>
                 {!isCurrenciesLoading && currencies.length === 0 && (
-                  <p className="text-xs text-amber-600 mt-1">تعذر تحميل العملات. يرجى تحديث الصفحة.</p>
+                  <p className="text-xs text-amber-600">تعذر تحميل العملات. يرجى تحديث الصفحة.</p>
                 )}
               </div>
             </div>
             {currency && amount && !isNaN(parseFloat(amount)) && parseFloat(amount) > 0 && (
-              <div className="mt-2">
-                <Badge variant="secondary" className="text-xs">
-                  سيتم إيداع {parseFloat(amount).toFixed(2)} {getCurrencyCode()}
-                </Badge>
-              </div>
+              <p className="text-xs font-medium text-primary">
+                سيتم إيداع {parseFloat(amount).toFixed(2)} {getCurrencyCode()}
+              </p>
             )}
           </div>
 
-          {/* Section 3: Notes */}
-          <div className="form-section">
-            <div className="form-section-title">
-              <FileText className="h-4 w-4" />
-              3. ملاحظات (اختياري)
-            </div>
-            <div className="form-field">
-              <Label htmlFor="notes" className="text-sm font-medium">ملاحظات (اختياري)</Label>
-              <textarea
-                id="notes"
-                rows={2}
-                placeholder="اكتب ملاحظة..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="notes" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+              <FileText className="h-3.5 w-3.5" />
+              ملاحظات (اختياري)
+            </Label>
+            <textarea
+              id="notes"
+              rows={1}
+              placeholder="اكتب ملاحظة..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="flex w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
           </div>
 
 
           {/* Submit Button */}
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isChecking}
             className="w-full h-11 font-semibold"
           >
-            {isLoading ? (
+            {isChecking || isLoading ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>جاري التنفيذ...</span>
+                <span>{isChecking ? "جاري احتساب العمولة..." : "جاري التنفيذ..."}</span>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -445,28 +515,59 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
           </Button>
         </form>
 
-        {/* Confirmation Dialog */}
+        {/* Confirmation Dialog — frozen presubmit snapshot */}
         <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>تأكيد الإيداع</DialogTitle>
               <DialogDescription>
-                سيتم إضافة {amount} {getCurrencyCode()} إلى محفظة  {normalizeMobile(propMobile || mobile)}. هل تريد المتابعة؟
+                راجع بيانات الإيداع قبل التأكيد
               </DialogDescription>
             </DialogHeader>
             <div className="rounded-lg bg-muted/30 p-4 space-y-2">
+             
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground flex items-center gap-1.5">
+                  <Smartphone className="h-3.5 w-3.5" /> المحفظة
+                </span>
+                <span className="font-mono font-semibold" dir="ltr">
+                  {confirmData?.mobile}
+                </span>
+              </div>
+               {confirmData?.walletName && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground"> الاسم </span>
+                  <span className="font-semibold">{confirmData.walletName}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">المبلغ</span>
-                <span className="font-semibold">{parseFloat(amount).toFixed(2)} {getCurrencyCode()}</span>
+                <span className="font-mono font-semibold" dir="ltr">
+                  {confirmData?.amount.toFixed(2)} {confirmData?.currencyCode}
+                </span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">رقم الجوال</span>
-                <span dir="ltr"> {normalizeMobile(propMobile || mobile)}</span>
-              </div>
-              {notes && (
+              {confirmData && confirmData.quote.totalCommission > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Receipt className="h-3.5 w-3.5" /> العمولة
+                  </span>
+                  <span className="font-mono font-semibold" dir="ltr">
+                    {confirmData.quote.totalCommission.toLocaleString()} {confirmData.currencyCode}
+                  </span>
+                </div>
+              )}
+              {confirmData && (
+                <div className="flex justify-between items-center text-sm border-t border-border/40 pt-2">
+                  <span className="font-semibold">الإجمالي المخصوم</span>
+                  <span className="font-mono font-bold text-primary" dir="ltr">
+                    {confirmData.quote.totalAmount.toLocaleString()} {confirmData.currencyCode}
+                  </span>
+                </div>
+              )}
+              {confirmData?.notes && (
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">ملاحظات</span>
-                  <span className="text-muted-foreground">{notes}</span>
+                  <span className="text-muted-foreground">{confirmData.notes}</span>
                 </div>
               )}
             </div>

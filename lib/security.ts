@@ -211,7 +211,7 @@ export const API_POLICY: RoutePolicy[] = [
   { pattern: ['agent', 'remittance', 'identity', 'otp', 'send'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'remittance', 'identity', 'otp', 'verify'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'remittance', 'identity', 'document-image'], methods: ['GET'], auth: 'agent', query: ['searchToken', 'slot', 'variant'] },
-  { pattern: ['agent', 'transactions'], methods: ['GET'], auth: 'agent', query: ['page', 'limit', 'sort'] },
+  { pattern: ['agent', 'transactions'], methods: ['GET'], auth: 'agent', query: ['page', 'limit', 'sort', 'currencyId', 'from', 'to', 'operation'] },
   { pattern: ['agent', 'dist-wallets'], methods: ['GET'], auth: 'agent' },
   { pattern: ['wallets', ':id'], methods: ['GET', 'PATCH'], auth: 'agent', query: ['depth'], body: 'json', sensitive: true },
   { pattern: ['wallets', ':id', 'transactions'], methods: ['GET'], auth: 'agent', query: ['page', 'limit'] },
