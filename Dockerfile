@@ -5,8 +5,7 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-# Global pnpm: the packageManager field makes pnpm >=9.7 self-switch to the
-# project-pinned version, so any global install stays compatible.
+# Use the globally installed pnpm version in the build image.
 RUN npm install -g pnpm && pnpm install --frozen-lockfile
 
 # ── Stage 2: builder ───────────────────────────────────────────────────────

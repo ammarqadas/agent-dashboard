@@ -2,7 +2,6 @@
   "name": "shadcn-dashboard",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.7.1",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
