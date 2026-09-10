@@ -3,18 +3,21 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileImage } from "lucide-react"
 import { apiClient } from "@/lib/api"
-import { IdentityImageGallery, collectStoredIdentityImages } from "@/components/identity"
+import { LinkedIdentityView } from "@/components/identity"
+import type { LinkedIdentity } from "@/components/identity"
 import { useRouter } from "next/navigation"
 
 interface WalletViewProps {
   wallet: any
   onActivated?: () => void
   showDetails?: boolean
+  showIdentity?: boolean
+  identity?: LinkedIdentity | null
+  isIdentityLoading?: boolean
 }
 
-export function WalletView({ wallet, onActivated, showDetails = true }: WalletViewProps) {
+export function WalletView({ wallet, onActivated, showDetails = true, showIdentity = true, identity, isIdentityLoading }: WalletViewProps) {
   const router = useRouter()
   const [isUpdating, setIsUpdating] = useState(false)
   const [walletData, setWalletData] = useState(wallet)
@@ -26,7 +29,10 @@ export function WalletView({ wallet, onActivated, showDetails = true }: WalletVi
   const walletName = walletData.name || "N/A"
   const walletMobile = walletData.mobile || "N/A"
   const isActive = walletData.active !== false
-  const storedImages = collectStoredIdentityImages(walletData?.card)
+  const identityRef = walletData?.identityLink?.identityRef
+  const imageBase = identityRef
+    ? `/api/proxy/agent/identities/${encodeURIComponent(String(identityRef))}/document-image`
+    : undefined
 
   const handleActivate = async () => {
     setIsUpdating(true)
@@ -73,15 +79,7 @@ export function WalletView({ wallet, onActivated, showDetails = true }: WalletVi
           </div>
         </div>
 
-        {storedImages.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-bold flex items-center gap-2">
-              <FileImage className="h-4 w-4 text-primary" />
-              صور الهوية
-            </h3>
-            <IdentityImageGallery images={storedImages} columns={3} />
-          </div>
-        )}
+        {showIdentity && identityRef && <LinkedIdentityView identity={identity} imageBase={imageBase} loading={isIdentityLoading} />}
 
         <div className="flex flex-wrap gap-2 pt-2">
           {!isActive && (

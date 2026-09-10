@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { apiClient } from "@/lib/api"
 import { WalletView } from "./wallet-view"
+import { LinkedIdentity } from "./identity"
 import { Search, Smartphone, Loader2, UserCircle } from "lucide-react"
 
 export function WalletSearch() {
@@ -14,11 +15,14 @@ export function WalletSearch() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [wallet, setWallet] = useState<any>(null)
+  const [identity, setIdentity] = useState<LinkedIdentity | null>(null)
+  const [isIdentityLoading, setIsIdentityLoading] = useState(false)
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setWallet(null)
+    setIdentity(null)
     setIsLoading(true)
 
     try {
@@ -27,7 +31,15 @@ export function WalletSearch() {
       if (response.success && response.wallet) {
         const walletResponse = await apiClient.getWallet(response.wallet.id)
         if (walletResponse.success) {
-          setWallet(walletResponse.data || walletResponse)
+          const walletData: any = walletResponse.data || walletResponse
+          setWallet(walletData)
+          const identityRef = walletData?.identityLink?.identityRef
+          if (identityRef) {
+            setIsIdentityLoading(true)
+            const identityResponse = await apiClient.getLinkedIdentity(identityRef)
+            setIdentity(identityResponse.success ? (identityResponse.data || identityResponse.identity || null) : null)
+            setIsIdentityLoading(false)
+          }
         } else {
           setWallet(response.wallet)
         }
@@ -38,6 +50,7 @@ export function WalletSearch() {
       setError("حدث خطأ. يرجى المحاولة مرة أخرى.")
     } finally {
       setIsLoading(false)
+      setIsIdentityLoading(false)
     }
   }
 
@@ -113,7 +126,7 @@ export function WalletSearch() {
       {/* Results */}
       {wallet && (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <WalletView wallet={wallet} />
+          <WalletView wallet={wallet} identity={identity} isIdentityLoading={isIdentityLoading} />
         </div>
       )}
     </div>

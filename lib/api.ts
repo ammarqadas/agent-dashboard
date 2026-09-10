@@ -228,6 +228,11 @@ class ApiClient {
     return this.request(`/wallets/${encodeId(id)}?depth=${d}`)
   }
 
+  // Identity records are referenced by wallet.identityLink.identityRef.
+  async getLinkedIdentity(identityRef: string | number) {
+    return this.request(`/agent/identities/${encodeId(identityRef)}`)
+  }
+
   // Activate/deactivate wallet
   async updateWallet(id: string | number, data: { active?: boolean;[key: string]: any }) {
     return this.request(`/wallets/${encodeId(id)}`, {

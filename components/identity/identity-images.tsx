@@ -201,7 +201,7 @@ export function IdentityImageGallery({
               alt={img.labelAr}
               className="w-full rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity"
               style={{ minHeight: "180px", maxHeight: "260px" }}
-              onClick={() => window.open(img.url, "_blank")}
+              onClick={() => window.open(img.fullUrl || img.url, "_blank")}
             />
           </div>
         </div>

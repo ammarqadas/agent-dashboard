@@ -203,6 +203,8 @@ export const API_POLICY: RoutePolicy[] = [
   { pattern: ['agent', 'login'], methods: ['POST'], auth: 'public', body: 'json', isLogin: true },
   { pattern: ['agent', 'create-wallet'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'wallet-search'], methods: ['GET'], auth: 'agent', query: ['mobile'] },
+  { pattern: ['agent', 'identities', ':id'], methods: ['GET'], auth: 'agent' },
+  { pattern: ['agent', 'identities', ':id', 'document-image'], methods: ['GET'], auth: 'agent', query: ['slot', 'variant', 'version'] },
   { pattern: ['agent', 'deposit'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'action', 'execute-generic'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'bulk-remittance'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
