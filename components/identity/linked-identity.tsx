@@ -32,6 +32,15 @@ export type LinkedIdentity = {
 
 const TYPE_LABELS = { national: "بطاقة شخصية", passport: "جواز سفر" }
 
+export type IdentityDetails = {
+  fullName?: string
+  idNumber?: string
+  type?: "national" | "passport"
+  issueDate?: string
+  expiryDate?: string
+  issuePlace?: string
+}
+
 function displayDate(value?: string) {
   if (!value) return "—"
   const date = new Date(value)
@@ -95,12 +104,14 @@ export function LinkedIdentityView({
         <UserRound className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-bold">بيانات الهوية</h3>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <IdentityDetail label="الاسم" value={identity.fullName} />
-        <IdentityDetail label="رقم الهوية" value={document?.number || undefined} ltr />
-        <IdentityDetail label="نوع الهوية" value={document ? TYPE_LABELS[document.attachmentType as "national" | "passport"] : undefined} />
-        <IdentityDetail label="تاريخ الانتهاء" value={displayDate(document?.expiryDate || undefined)} ltr />
-      </div>
+      <IdentityDetailsGrid details={{
+        fullName: identity.fullName,
+        idNumber: document?.number || undefined,
+        type: document?.attachmentType === "passport" ? "passport" : document ? "national" : undefined,
+        issueDate: document?.issueDate || undefined,
+        expiryDate: document?.expiryDate || undefined,
+        issuePlace: document?.issuePlace || undefined,
+      }} />
       {images.length > 0 && (
         <div className="space-y-3">
           <h4 className="flex items-center gap-2 text-sm font-bold"><FileImage className="h-4 w-4 text-primary" />صور الهوية</h4>
@@ -111,6 +122,19 @@ export function LinkedIdentityView({
   )
 }
 
-function IdentityDetail({ label, value, ltr }: { label: string; value?: string; ltr?: boolean }) {
-  return <div className="rounded-lg border bg-muted/30 p-3"><p className="mb-1 text-xs text-muted-foreground">{label}</p><p className="font-semibold" dir={ltr ? "ltr" : undefined}>{value || "—"}</p></div>
+export function IdentityDetailsGrid({ details }: { details: IdentityDetails }) {
+  return (
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border/60 sm:grid-cols-3">
+      <IdentityDetail label="الاسم الكامل" value={details.fullName} className="col-span-2 sm:col-span-1" />
+      <IdentityDetail label="رقم الهوية" value={details.idNumber} ltr />
+      <IdentityDetail label="نوع الهوية" value={details.type ? TYPE_LABELS[details.type] : undefined} />
+      <IdentityDetail label="تاريخ الإصدار" value={displayDate(details.issueDate)} ltr />
+      <IdentityDetail label="تاريخ الانتهاء" value={displayDate(details.expiryDate)} ltr />
+      <IdentityDetail label="جهة الإصدار" value={details.issuePlace} />
+    </div>
+  )
+}
+
+function IdentityDetail({ label, value, ltr, className = "" }: { label: string; value?: string; ltr?: boolean; className?: string }) {
+  return <div className={`min-w-0 bg-background/90 p-3 ${className}`}><p className="mb-1 text-[11px] font-medium text-muted-foreground">{label}</p><p className="truncate text-sm font-semibold" dir={ltr ? "ltr" : undefined} title={value}>{value || "—"}</p></div>
 }

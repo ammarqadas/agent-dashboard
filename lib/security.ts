@@ -225,6 +225,7 @@ export const API_POLICY: RoutePolicy[] = [
   { pattern: ['accounts', ':id'], methods: ['GET'], auth: 'agent' },
   { pattern: ['currencies'], methods: ['GET'], auth: 'agent' },
   { pattern: ['wallet-cards', 'with-upload'], methods: ['POST'], auth: 'agent', body: 'multipart', sensitive: true },
+  { pattern: ['agent', 'wallets', ':id', 'identity', 'link-existing'], methods: ['POST'], auth: 'agent', sensitive: true },
 ]
 
 export function matchPolicy(segments: string[]): RoutePolicy | null {

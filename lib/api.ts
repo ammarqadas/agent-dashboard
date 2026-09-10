@@ -112,7 +112,14 @@ class ApiClient {
         return { success: false, message: 'حجم البيانات المرسلة كبير جداً.' }
       }
       if (response.status === 429) {
-        return { success: false, message: 'عدد كبير من المحاولات. يرجى المحاولة لاحقاً.' }
+        const data = await response.json().catch(() => ({}))
+        const retryAfter = Number(response.headers.get('retry-after') || data?.retryAfterSeconds || 0)
+        return {
+          ...data,
+          success: false,
+          message: data?.message || 'عدد كبير من المحاولات. يرجى المحاولة لاحقاً.',
+          ...(retryAfter > 0 ? { retryAfterSeconds: retryAfter } : {}),
+        }
       }
 
       const contentType = response.headers.get('content-type') || ''
@@ -231,6 +238,12 @@ class ApiClient {
   // Identity records are referenced by wallet.identityLink.identityRef.
   async getLinkedIdentity(identityRef: string | number) {
     return this.request(`/agent/identities/${encodeId(identityRef)}`)
+  }
+
+  async agentLinkExistingWalletIdentity(walletId: string | number) {
+    return this.request(`/agent/wallets/${encodeId(walletId)}/identity/link-existing`, {
+      method: 'POST',
+    })
   }
 
   // Activate/deactivate wallet
@@ -409,6 +422,7 @@ class ApiClient {
       destinationMasked: string
       expiresInSeconds: number
       resendAfterSeconds: number
+      deliveryUncertain?: boolean
     }>('/agent/remittance/identity/otp/send', {
       method: 'POST',
       body: JSON.stringify({ searchToken, candidateToken }),

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,6 +47,7 @@ import { DateInput, isValidDateInput, dateInputToISO, isoToDateInput } from "@/c
 import { SharePdfButton } from "@/components/receipt/share-pdf-button"
 import {
   IdentityImagesSection,
+  IdentityDetailsGrid,
   useIdentityImages,
   type IdentityImageFiles,
   type IdentityImageSlot,
@@ -97,6 +99,10 @@ type IdentityAuthorization = {
   idempotencyKey: string
 }
 
+type PaymentState = "idle" | "submitting" | "checking" | "uncertain" | "in_progress" | "failed"
+
+const PAYOUT_ATTEMPT_TTL_MS = 24 * 60 * 60 * 1000
+
 function identityBlockedMessage(status: string): string {
   switch (status) {
     case "existing":
@@ -134,23 +140,41 @@ function newIdempotencyKey(): string {
   return `pay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`
 }
 
+function payoutAttemptStorageKey(result: SearchResult): string {
+  return `remittance-payout:${result.networkKey}:${result.reference}`
+}
+
+function getOrCreatePayoutKey(result: SearchResult): string {
+  const storageKey = payoutAttemptStorageKey(result)
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(storageKey) || "null") as {
+      key?: string
+      createdAt?: number
+    } | null
+    if (
+      stored?.key &&
+      typeof stored.createdAt === "number" &&
+      Date.now() - stored.createdAt < PAYOUT_ATTEMPT_TTL_MS
+    ) {
+      return stored.key
+    }
+  } catch {}
+
+  const key = newIdempotencyKey()
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify({ key, createdAt: Date.now() }))
+  } catch {}
+  return key
+}
+
 const ID_TYPE_LABELS: Record<"national" | "passport", string> = {
   national: "بطاقة شخصية",
   passport: "جواز سفر",
 }
 
-function identityDateValue(value?: string): string {
-  if (!value) return ""
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value.slice(0, 10)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
-function formatIdentityDate(value?: string): string {
-  return identityDateValue(value) || "—"
+function fullIdentityImageUrl(preview: string): string {
+  if (!preview.includes("/agent/remittance/identity/document-image")) return preview
+  return `${preview}${preview.includes("?") ? "&" : "?"}variant=content`
 }
 
 
@@ -276,7 +300,9 @@ function RemittanceResultStep({
   identityLocked,
   identityComplete,
   isPaying,
+  paymentBlocked,
   isSendingOtp,
+  otpResendSeconds,
   networks,
   onIdNumberChange,
   onIdTypeChange,
@@ -300,7 +326,9 @@ function RemittanceResultStep({
   identityLocked: boolean
   identityComplete: boolean
   isPaying: boolean
+  paymentBlocked: boolean
   isSendingOtp: boolean
+  otpResendSeconds: number
   networks: any[]
   onIdNumberChange: (v: string) => void
   onIdTypeChange: (v: "national" | "passport") => void
@@ -397,75 +425,84 @@ function RemittanceResultStep({
             {/* Identity: OTP for an existing identity (or to resolve its document), otherwise collect a new identity. */}
             {flow.otp ? (
               <form onSubmit={onPaySubmit} className="space-y-5">
-                <div className={`rounded-xl border p-4 ${identityLocked ? "border-emerald-500/40 bg-emerald-50" : "border-primary/30 bg-primary/5"}`}>
-                  <div className="flex items-start gap-3">
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${identityLocked ? "bg-emerald-600 text-white" : "bg-primary/10 text-primary"}`}>
-                      {identityLocked ? <ShieldCheck className="h-5 w-5" /> : <KeyRound className="h-5 w-5" />}
-                    </div>
-                    <div className="flex-1 space-y-3">
-                      <div>
-                        <p className="text-sm font-bold">
-                          {identityLocked ? "تم التحقق من هوية المستلم" : "هوية المستلم موثقة مسبقاً"}
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {identityLocked
-                            ? "يمكنك الآن متابعة دفع الحوالة"
-                            : `سيتم إرسال رمز تحقق إلى ${searchResult.identity?.mobile || searchResult.receiverMobile || "رقم المستلم"}`}
+                <div className={`overflow-hidden rounded-2xl border ${identityLocked ? "border-emerald-500/40 bg-emerald-50/70" : "border-primary/30 bg-primary/[0.035]"}`}>
+                  <div className="space-y-4 p-4 sm:p-5">
+                    <div className="flex items-start gap-3">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${identityLocked ? "bg-emerald-600 text-white shadow-sm" : "bg-primary/10 text-primary"}`}>
+                        <ShieldCheck className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-bold">هوية المستلم مسجلة مسبقاً</p>
+                          <Badge className={identityLocked ? "bg-emerald-600 hover:bg-emerald-600" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/10"}>
+                            {identityLocked ? "تم التحقق" : "هوية موثقة"}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          تم العثور على هوية مرتبطة ببيانات المستلم. راجع المعلومات ثم تحقق من رقم الجوال قبل الدفع.
                         </p>
                       </div>
+                    </div>
 
-                      {searchResult.identity && (
-                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-lg border border-border/50 bg-background/70 px-3 py-2.5">
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-xs font-bold text-primary">الاسم</span>
-                            <span className="text-sm font-semibold">{searchResult.identity?.fullName || "—"}</span>
-                          </div>
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-xs font-bold text-primary">رقم الهوية</span>
-                            <span className="text-sm font-mono font-semibold" dir="ltr">{searchResult.identity?.numberMasked || "—"}</span>
-                          </div>
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-xs font-bold text-primary">نوع الهوية</span>
-                            <span className="text-sm font-semibold">{searchResult.identity?.type ? ID_TYPE_LABELS[searchResult.identity.type] : "—"}</span>
-                          </div>
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-xs font-bold text-primary">تاريخ الانتهاء</span>
-                            <span className="text-sm font-mono font-semibold" dir="ltr">{formatIdentityDate(searchResult.identity?.expiryDate)}</span>
-                          </div>
+                    <IdentityDetailsGrid details={{
+                      fullName: searchResult.identity?.fullName || searchResult.receiverName,
+                      idNumber: searchResult.identity?.numberMasked,
+                      type: searchResult.identity?.type,
+                      issueDate: searchResult.identity?.issueDate,
+                      expiryDate: searchResult.identity?.expiryDate,
+                      issuePlace: searchResult.identity?.issuePlace,
+                    }} />
+                  </div>
+
+                  <div className={`border-t px-4 py-3 sm:px-5 ${identityLocked ? "border-emerald-500/20 bg-emerald-100/50" : "border-primary/15 bg-background/70"}`}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-2.5">
+                        <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${identityLocked ? "bg-emerald-600 text-white" : "bg-primary text-primary-foreground"}`}>
+                          {identityLocked ? <CheckCircle2 className="h-4 w-4" /> : "1"}
                         </div>
-                      )}
-
+                        <div>
+                          <p className="text-sm font-bold">{identityLocked ? "تم التحقق من المستلم" : "تحقق عبر رمز الجوال"}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {identityLocked
+                              ? "أصبحت الحوالة جاهزة للدفع"
+                              : <>سيُرسل الرمز إلى <span className="font-mono font-semibold text-foreground" dir="ltr">{searchResult.identity?.mobile || searchResult.receiverMobile || "رقم المستلم"}</span></>}
+                          </p>
+                        </div>
+                      </div>
                       {!identityLocked && (
-                        <Button
-                          type="button"
-                          onClick={onSendOtp}
-                          disabled={isSendingOtp}
-                          className="h-10 w-full sm:w-auto"
-                        >
-                          {isSendingOtp ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Send className="h-4 w-4" />
-                          )}
-                          {isSendingOtp ? "جاري إرسال الرمز..." : "إرسال رمز التحقق"}
+                        <Button type="button" onClick={onSendOtp} disabled={isSendingOtp || otpResendSeconds > 0} className="h-10 w-full shrink-0 sm:w-auto">
+                          {isSendingOtp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                          {isSendingOtp
+                            ? "جاري إرسال الرمز..."
+                            : otpResendSeconds > 0
+                              ? `إعادة المحاولة بعد ${otpResendSeconds} ثانية`
+                              : "إرسال رمز التحقق"}
                         </Button>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex gap-3">
-                  <Button type="button" variant="outline" onClick={onReset} className="h-11">
+                {!identityLocked && (
+                  <p id="existing-identity-payment-help" className="flex items-center gap-1.5 text-xs text-amber-700">
+                    <KeyRound className="h-3.5 w-3.5" />
+                    أرسل رمز التحقق وأدخله لتفعيل دفع الحوالة
+                  </p>
+                )}
+
+                <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                  <Button type="button" variant="outline" onClick={onReset} disabled={isPaying || paymentBlocked} className="h-11 sm:w-auto">
                     <RotateCcw className="h-4 w-4" />
                     بحث جديد
                   </Button>
                   <Button
                     type="submit"
-                    disabled={isPaying || !identityComplete}
+                    disabled={isPaying || paymentBlocked || !identityComplete}
+                    aria-describedby={!identityLocked ? "existing-identity-payment-help" : undefined}
                     className="h-11 flex-1 font-semibold bg-gradient-to-r from-primary to-emerald-600 hover:to-emerald-700"
                   >
                     <Coins className="h-4 w-4" />
-                    دفع الحوالة
+                    {identityLocked ? "دفع الحوالة" : "الدفع بعد التحقق"}
                   </Button>
                 </div>
               </form>
@@ -601,6 +638,7 @@ function RemittanceResultStep({
                   type="button"
                   variant="outline"
                   onClick={onReset}
+                  disabled={isPaying || paymentBlocked}
                   className="h-11"
                 >
                   <div className="flex items-center gap-2">
@@ -610,7 +648,7 @@ function RemittanceResultStep({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isPaying || !identityComplete}
+                  disabled={isPaying || paymentBlocked || !identityComplete}
                   className="flex-1 h-11 font-semibold bg-gradient-to-r from-primary to-emerald-600 hover:to-emerald-700"
                 >
                   {isPaying ? (
@@ -689,6 +727,11 @@ function RemittanceResultStep({
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-[11px] font-bold tracking-wide text-muted-foreground">هوية المستلم</span>
+                  {flow.otp && (
+                    <Badge className="mr-auto h-5 border-emerald-200 bg-emerald-50 px-1.5 text-[9px] text-emerald-700 hover:bg-emerald-50">
+                      موثقة
+                    </Badge>
+                  )}
                 </div>
                 <div className="space-y-1">
                   {idNumber && (
@@ -733,19 +776,33 @@ function RemittanceResultStep({
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground">أمام</p>
                     {frontPreview ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={frontPreview} alt="هوية - أمام" className="h-16 w-full rounded-md border object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => window.open(fullIdentityImageUrl(frontPreview), "_blank")}
+                        className="block w-full overflow-hidden rounded-lg border bg-muted/20 p-1 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label="عرض صورة الهوية الأمامية بالحجم الكامل"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={frontPreview} alt="هوية - أمام" className="aspect-[1.58/1] w-full object-contain" />
+                      </button>
                     ) : (
-                      <div className="h-16 rounded-md border border-dashed" />
+                      <div className="aspect-[1.58/1] rounded-md border border-dashed" />
                     )}
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground">خلف</p>
                     {backPreview ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={backPreview} alt="هوية - خلف" className="h-16 w-full rounded-md border object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => window.open(fullIdentityImageUrl(backPreview), "_blank")}
+                        className="block w-full overflow-hidden rounded-lg border bg-muted/20 p-1 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label="عرض صورة الهوية الخلفية بالحجم الكامل"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={backPreview} alt="هوية - خلف" className="aspect-[1.58/1] w-full object-contain" />
+                      </button>
                     ) : (
-                      <div className="h-16 rounded-md border border-dashed" />
+                      <div className="aspect-[1.58/1] rounded-md border border-dashed" />
                     )}
                   </div>
                 </div>
@@ -1259,6 +1316,11 @@ export function RemittanceSearchPay() {
   const [identityAuth, setIdentityAuth] = useState<IdentityAuthorization | null>(null)
 
   const [isPaying, setIsPaying] = useState(false)
+  const [paymentState, setPaymentState] = useState<PaymentState>("idle")
+  const [paymentMessage, setPaymentMessage] = useState("")
+  const payoutInFlightRef = useRef(false)
+  const authorizationInFlightRef = useRef(false)
+  const recoveryTimerRef = useRef<number | null>(null)
   const [payResult, setPayResult] = useState<PayResult | null>(null)
   const [paidAt, setPaidAt] = useState<Date>(new Date())
 
@@ -1287,6 +1349,7 @@ export function RemittanceSearchPay() {
 
   const flow = searchResult ? identityFlow(searchResult.identityStatus) : null
   const identityLocked = !!identityAuth
+  const paymentUnresolved = ["uncertain", "checking", "in_progress"].includes(paymentState)
   const identityComplete = Boolean(
     flow &&
       (flow.upload
@@ -1307,6 +1370,21 @@ export function RemittanceSearchPay() {
     )
     return () => window.clearTimeout(timer)
   }, [otpResendSeconds])
+
+  useEffect(() => {
+    const unresolved = ["submitting", "checking", "uncertain", "in_progress"].includes(paymentState)
+    if (!unresolved) return
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", warnBeforeLeave)
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave)
+  }, [paymentState])
+
+  useEffect(() => () => {
+    if (recoveryTimerRef.current !== null) window.clearTimeout(recoveryTimerRef.current)
+  }, [])
 
   useEffect(() => {
     const fetchNetworks = async () => {
@@ -1357,6 +1435,8 @@ export function RemittanceSearchPay() {
         const rem: any = d.remittance || {}
         const dec: any = d.identityDecision || {}
         setIdentityAuth(null)
+        setPaymentState("idle")
+        setPaymentMessage("")
         setOtp("")
         setOtpDestination("")
         setOtpResendSeconds(0)
@@ -1418,6 +1498,8 @@ export function RemittanceSearchPay() {
         searchResult.candidateToken
       )
       if (!response.success) {
+        const retryAfterSeconds = Number((response as any).retryAfterSeconds || 0)
+        if (retryAfterSeconds > 0) setOtpResendSeconds(retryAfterSeconds)
         toast.error(response.message || "تعذر إرسال رمز التحقق")
         return
       }
@@ -1426,7 +1508,11 @@ export function RemittanceSearchPay() {
       setOtpDestination(String(data.destinationMasked || searchResult.receiverMobile || ""))
       setOtpResendSeconds(Number(data.resendAfterSeconds) || 60)
       setShowOtpDialog(true)
-      toast.success("تم إرسال رمز التحقق إلى المستلم")
+      if (data.deliveryUncertain) {
+        toast.warning("تأخر تأكيد الإرسال. انتظر وصول الرمز أو أعد المحاولة بعد انتهاء المهلة")
+      } else {
+        toast.success("تم إرسال رمز التحقق إلى المستلم")
+      }
     } catch (error: any) {
       toast.error(error.message || "تعذر إرسال رمز التحقق")
     } finally {
@@ -1436,11 +1522,20 @@ export function RemittanceSearchPay() {
 
   const submitAuthorizedPayout = async (
     auth: IdentityAuthorization,
-    closeConfirmationOnFailure: boolean
+    closeConfirmationOnFailure: boolean,
+    recoveryCheck = false,
   ) => {
-    if (!searchResult) return false
+    if (!searchResult || payoutInFlightRef.current) return false
+    if (recoveryCheck && recoveryTimerRef.current !== null) {
+      window.clearTimeout(recoveryTimerRef.current)
+      recoveryTimerRef.current = null
+    }
 
+    payoutInFlightRef.current = true
     setIsPaying(true)
+    setPaymentState(recoveryCheck ? "checking" : "submitting")
+    setPaymentMessage(recoveryCheck ? "جاري التحقق من نتيجة عملية الدفع السابقة..." : "جاري تنفيذ عملية الدفع...")
+    let scheduleRecovery = false
     try {
       const response = await apiClient.agentRemittancePay(
         searchResult.networkKey,
@@ -1453,6 +1548,8 @@ export function RemittanceSearchPay() {
       )
 
       if (response.success) {
+        setPaymentState("idle")
+        setPaymentMessage("")
         setPayResult(normalizePayResult(response.data, searchResult))
         setPaidAt(new Date())
         setShowConfirmDialog(false)
@@ -1461,35 +1558,61 @@ export function RemittanceSearchPay() {
       }
 
       if (response.code === "PAYMENT_IN_PROGRESS") {
+        setPaymentState("in_progress")
+        setPaymentMessage("عملية الدفع قيد المعالجة. لا تبدأ عملية جديدة؛ تحقق من النتيجة بعد قليل.")
         toast.warning("الدفع قيد المعالجة حالياً — لا تُعد المحاولة الآن، تحقق من الحوالة بعد قليل")
-        if (closeConfirmationOnFailure) setShowConfirmDialog(false)
+        setShowConfirmDialog(false)
+        setShowOtpDialog(false)
         return false
       }
       if (response.code === "IDEMPOTENCY_KEY_REUSED") {
+        setPaymentState("failed")
+        setPaymentMessage("تعذر متابعة العملية لأن مفتاحها مرتبط بحوالة أخرى. ابحث عن الحوالة من جديد.")
         toast.error("مفتاح العملية مستخدم لحوالة أخرى — ابحث عن الحوالة من جديد لبدء عملية جديدة")
         if (closeConfirmationOnFailure) setShowConfirmDialog(false)
         return false
       }
 
-      toast.error(
-        response.code === "UPSTREAM_TIMEOUT" || response.code === "CLIENT_TIMEOUT"
-          ? "انتهت مهلة الاستجابة وقد تكون الحوالة صُرفت. أعد المحاولة من نفس الصفحة للتحقق باستخدام نفس مفتاح العملية."
-          : response.message || "فشل في دفع الحوالة"
-      )
+      if (
+        response.code === "UPSTREAM_TIMEOUT" ||
+        response.code === "CLIENT_TIMEOUT" ||
+        response.code === "UPSTREAM_UNAVAILABLE"
+      ) {
+        setPaymentState("uncertain")
+        setPaymentMessage("انتهت مهلة الاستجابة وقد تكون الحوالة صُرفت. سيتم التحقق تلقائياً بنفس مفتاح العملية.")
+        setShowConfirmDialog(false)
+        setShowOtpDialog(false)
+        scheduleRecovery = !recoveryCheck
+        toast.warning("انتهت مهلة الاستجابة. لا تُعد الدفع؛ جارٍ التحقق من النتيجة بنفس مفتاح العملية.")
+        return false
+      }
+
+      setPaymentState("failed")
+      setPaymentMessage(response.message || "فشل في دفع الحوالة")
+      toast.error(response.message || "فشل في دفع الحوالة")
       if (closeConfirmationOnFailure) setShowConfirmDialog(false)
       return false
     } catch (error: any) {
+      setPaymentState("failed")
+      setPaymentMessage(error.message || "حدث خطأ أثناء الدفع")
       toast.error(error.message || "حدث خطأ أثناء الدفع")
       if (closeConfirmationOnFailure) setShowConfirmDialog(false)
       return false
     } finally {
+      payoutInFlightRef.current = false
       setIsPaying(false)
+      if (scheduleRecovery) {
+        recoveryTimerRef.current = window.setTimeout(() => {
+          recoveryTimerRef.current = null
+          void submitAuthorizedPayout(auth, false, true)
+        }, 2500)
+      }
     }
   }
 
   const handleVerifyOtp = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!searchResult || !flow?.otp) return
+    if (!searchResult || !flow?.otp || authorizationInFlightRef.current) return
     if (identityAuth) {
       await submitAuthorizedPayout(identityAuth, false)
       return
@@ -1499,6 +1622,7 @@ export function RemittanceSearchPay() {
       return
     }
 
+    authorizationInFlightRef.current = true
     setIsVerifyingOtp(true)
     try {
       const response = await apiClient.agentRemittanceIdentityOtpVerify(
@@ -1512,7 +1636,7 @@ export function RemittanceSearchPay() {
       }
       const auth = {
         token: String(data.identityAuthorizationToken),
-        idempotencyKey: newIdempotencyKey(),
+        idempotencyKey: getOrCreatePayoutKey(searchResult),
       }
       setIdentityAuth(auth)
       setOtp("")
@@ -1521,6 +1645,7 @@ export function RemittanceSearchPay() {
     } catch (error: any) {
       toast.error(error.message || "تعذر التحقق من الرمز")
     } finally {
+      authorizationInFlightRef.current = false
       setIsVerifyingOtp(false)
     }
   }
@@ -1564,7 +1689,7 @@ export function RemittanceSearchPay() {
   }
 
   const handleConfirmPay = async () => {
-    if (!searchResult || !flow || flow.blocked) return
+    if (!searchResult || !flow || flow.blocked || authorizationInFlightRef.current) return
     if (
       flow?.upload &&
       (!identityImages.files.front ||
@@ -1575,6 +1700,7 @@ export function RemittanceSearchPay() {
         !issuePlace.trim())
     )
       return
+    authorizationInFlightRef.current = true
     setIsPaying(true)
 
     try {
@@ -1601,7 +1727,7 @@ export function RemittanceSearchPay() {
           setShowConfirmDialog(false)
           return
         }
-        auth = { token: String(uploadToken), idempotencyKey: newIdempotencyKey() }
+        auth = { token: String(uploadToken), idempotencyKey: getOrCreatePayoutKey(searchResult) }
         setIdentityAuth(auth)
       }
       if (!auth) {
@@ -1615,11 +1741,20 @@ export function RemittanceSearchPay() {
       toast.error(err.message || "حدث خطأ أثناء الدفع")
       setShowConfirmDialog(false)
     } finally {
+      authorizationInFlightRef.current = false
       setIsPaying(false)
     }
   }
 
   const handleReset = () => {
+    if (paymentUnresolved || isPaying) {
+      toast.warning("تحقق من نتيجة عملية الدفع الحالية قبل بدء بحث جديد")
+      return
+    }
+    if (recoveryTimerRef.current !== null) {
+      window.clearTimeout(recoveryTimerRef.current)
+      recoveryTimerRef.current = null
+    }
     setInputRemittanceId("")
     setSearchResult(null)
     setPayResult(null)
@@ -1631,6 +1766,8 @@ export function RemittanceSearchPay() {
     identityImages.reset()
     setStoredDocPreviews({ front: null, back: null })
     setIdentityAuth(null)
+    setPaymentState("idle")
+    setPaymentMessage("")
     setShowOtpDialog(false)
     setOtp("")
     setOtpDestination("")
@@ -1657,6 +1794,46 @@ export function RemittanceSearchPay() {
   if (searchResult) {
     return (
       <>
+        {paymentState !== "idle" && (
+          <Alert
+            variant={paymentState === "failed" ? "destructive" : "default"}
+            className={`mb-4 ${paymentUnresolved ? "border-amber-400 bg-amber-50 text-amber-900" : ""}`}
+          >
+            {paymentState === "checking" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <AlertTriangle className="h-4 w-4" />
+            )}
+            <AlertTitle>
+              {paymentState === "checking"
+                ? "جاري التحقق من نتيجة الدفع"
+                : paymentState === "in_progress"
+                  ? "الدفع قيد المعالجة"
+                  : paymentState === "uncertain"
+                    ? "نتيجة الدفع غير مؤكدة"
+                    : paymentState === "submitting"
+                      ? "جاري تنفيذ الدفع"
+                      : "تعذر إتمام الدفع"}
+            </AlertTitle>
+            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span>{paymentMessage}</span>
+              {paymentUnresolved && identityAuth && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isPaying || paymentState === "checking"}
+                  onClick={() => void submitAuthorizedPayout(identityAuth, false, true)}
+                  className="shrink-0 bg-background"
+                >
+                  {isPaying && <Loader2 className="h-4 w-4 animate-spin" />}
+                  التحقق من نتيجة الدفع
+                </Button>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
         <RemittanceResultStep
           searchResult={searchResult}
           idNumber={idNumber}
@@ -1669,7 +1846,9 @@ export function RemittanceSearchPay() {
           identityLocked={identityLocked}
           identityComplete={identityComplete}
           isPaying={isPaying}
+          paymentBlocked={paymentUnresolved}
           isSendingOtp={isSendingOtp}
+          otpResendSeconds={otpResendSeconds}
           networks={networks}
           onIdNumberChange={setIdNumber}
           onIdTypeChange={(v) => setIdType(v)}
@@ -1685,7 +1864,10 @@ export function RemittanceSearchPay() {
 
         <IdentityOtpDialog
           open={showOtpDialog}
-          onOpenChange={setShowOtpDialog}
+          onOpenChange={(open) => {
+            if (!open && isPaying) return
+            setShowOtpDialog(open)
+          }}
           destinationMasked={otpDestination}
           otp={otp}
           resendSeconds={otpResendSeconds}
@@ -1700,7 +1882,10 @@ export function RemittanceSearchPay() {
 
         <PayConfirmDialog
           open={showConfirmDialog}
-          onOpenChange={setShowConfirmDialog}
+          onOpenChange={(open) => {
+            if (!open && isPaying) return
+            setShowConfirmDialog(open)
+          }}
           searchResult={searchResult}
           idNumber={idNumber}
           idType={idType}

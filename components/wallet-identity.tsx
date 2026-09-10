@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { User } from "lucide-react"
+import { Loader2, User, UserCheck } from "lucide-react"
 import { toast } from "sonner"
 import { IdentityImagesSection, linkedIdentityDocument, linkedIdentityImages, storedIdentityPreviewMap, useIdentityImages } from "@/components/identity"
 import type { LinkedIdentity } from "@/components/identity"
@@ -46,10 +46,31 @@ export function WalletIdentity({
   const identityImages = useIdentityImages(["front", "back", "selfie"], storedPreviews)
 
   const [isSaving, setIsSaving] = useState(false)
+  const [isLinking, setIsLinking] = useState(false)
   const [error, setError] = useState<string>("")
   const [success, setSuccess] = useState<string>("")
 
   const walletId = wallet?.id || wallet?._id
+
+  const handleLinkExisting = async () => {
+    setError("")
+    setSuccess("")
+    setIsLinking(true)
+    try {
+      const res = await apiClient.agentLinkExistingWalletIdentity(walletId)
+      if (!res.success) {
+        setError(res.message || "لم يتم العثور على هوية مطابقة يمكن ربطها.")
+        return
+      }
+      setSuccess("تم ربط الهوية الموجودة بالمحفظة دون تعديل بياناتها.")
+      toast.success("تم ربط الهوية الموجودة بالمحفظة.")
+      onUpdated?.()
+    } catch {
+      setError("تعذر ربط الهوية الموجودة بالمحفظة.")
+    } finally {
+      setIsLinking(false)
+    }
+  }
 
   useEffect(() => {
     const current = linkedIdentityDocument(identity)
@@ -68,6 +89,10 @@ export function WalletIdentity({
       return
     }
     const hasNewImage = Object.values(identityImages.files).some(Boolean)
+    if (!identityRef && (!identityImages.files.front || !identityImages.files.back)) {
+      setError("اربط الهوية الموجودة أولاً، أو ارفع صورتي الوجه والخلف لتسجيل هوية جديدة.")
+      return
+    }
     if (hasNewImage && (!identityImages.files.front || !identityImages.files.back)) {
       setError("يجب رفع الصورتين الأمامية والخلفية معاً عند تحديث صور الهوية.")
       return
@@ -100,10 +125,12 @@ export function WalletIdentity({
     }
   }
 
-  const title = verified ? "بيانات الهوية" : "تحديث الهوية"
+  const title = verified ? "بيانات الهوية" : identityRef ? "تحديث الهوية" : "ربط أو تسجيل الهوية"
   const description = verified
     ? "الهوية موثقة ولا يمكن تعديلها"
-    : "الصور اختيارية، وعند تحديثها يجب رفع الوجهين الأمامي والخلفي معاً"
+    : identityRef
+      ? "الصور اختيارية، وعند تحديثها يجب رفع الوجهين الأمامي والخلفي معاً"
+      : "اربط هوية مطابقة موجودة أولاً، أو ارفع الوجهين لتسجيل هوية جديدة"
 
   return (
     <Card>
@@ -119,6 +146,20 @@ export function WalletIdentity({
         </div>
       </CardHeader>
       <CardContent>
+        {!identityRef && (
+          <div className="mb-5 rounded-lg border bg-muted/30 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold">هل هوية العميل مسجلة مسبقاً؟</p>
+                <p className="mt-1 text-xs text-muted-foreground">سيتم الربط فقط عند تطابق اسم العميل ورقم جواله بالكامل.</p>
+              </div>
+              <Button type="button" variant="outline" onClick={handleLinkExisting} disabled={isLinking || isSaving}>
+                {isLinking ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <UserCheck className="ml-2 h-4 w-4" />}
+                ربط الهوية الموجودة
+              </Button>
+            </div>
+          </div>
+        )}
         {!verified && <form onSubmit={handleSave} className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
