@@ -212,24 +212,15 @@ export function WalletIdentity({
             </div>
           </div>
         )}
-        <IdentityImagesSection
-          slots={["front", "back", "selfie"]}
-          files={identityImages.files}
-          previews={identityImages.previews}
-          onImageChange={identityImages.set}
-          locked={verified}
-          columns={3}
-        />
-
-        {error && <p className="text-sm text-destructive bg-destructive/5 p-3 rounded-lg border border-destructive/20">{error}</p>}
-        {success && <p className="text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg border border-emerald-200">{success}</p>}
-
-        {!verified && (
-          <div className="flex justify-end">
-            <Button type="submit" disabled={isSaving} className="min-w-40">
-              {isSaving ? "جاري الحفظ..." : "حفظ الهوية"}
-            </Button>
-          </div>
+        {verified && (
+          <IdentityImagesSection
+            slots={["front", "back", "selfie"]}
+            files={identityImages.files}
+            previews={identityImages.previews}
+            onImageChange={identityImages.set}
+            locked
+            columns={3}
+          />
         )}
       </CardContent>
     </Card>
