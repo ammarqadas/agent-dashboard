@@ -32,9 +32,12 @@ export const maxDuration = 100
 const UPSTREAM = process.env.DADIH_API_URL?.trim().replace(/\/+$/, '')
 const ALLOW_HTTP_UPSTREAM = process.env.DADIH_ALLOW_HTTP === 'true'
 const UPSTREAM_TIMEOUT_MS = 30_000
+// Payout/execute-generic timeout. Small values are honored in dev (>= 1000ms)
+// so local flow testing can force a timeout; unset → 60s. Production should
+// keep a generous value.
 const configuredPayoutTimeout = Number(process.env.PAYOUT_UPSTREAM_TIMEOUT_MS ?? 60_000)
 const PAYOUT_UPSTREAM_TIMEOUT_MS =
-  Number.isFinite(configuredPayoutTimeout) && configuredPayoutTimeout > UPSTREAM_TIMEOUT_MS
+  Number.isFinite(configuredPayoutTimeout) && configuredPayoutTimeout >= 1_000
     ? configuredPayoutTimeout
     : 60_000
 // Identity upload validates and re-encodes both images upstream.
@@ -45,6 +48,16 @@ const IDENTITY_UPLOAD_UPSTREAM_TIMEOUT_MS =
   Number.isFinite(configuredIdentityUploadTimeout) && configuredIdentityUploadTimeout > UPSTREAM_TIMEOUT_MS
     ? configuredIdentityUploadTimeout
     : 90_000
+// Dev-only timeout simulator for agent/action/execute-generic. Enabling it
+// pauses the upstream fetch so the proxy's own timeout can fire on demand —
+// exercises the real UPSTREAM_TIMEOUT path without a slow backend. Never
+// active in production (IS_PROD guard below).
+const DEV_SIMULATE_EXECUTE_TIMEOUT = process.env.DEV_SIMULATE_EXECUTE_TIMEOUT === 'true'
+const configuredSimulateMs = Number(process.env.DEV_SIMULATE_EXECUTE_TIMEOUT_MS ?? 60_000)
+const DEV_SIMULATE_EXECUTE_TIMEOUT_MS =
+  Number.isFinite(configuredSimulateMs) && configuredSimulateMs > 0
+    ? configuredSimulateMs
+    : 60_000
 
 let upstreamBlocked = true
 if (!UPSTREAM) {
@@ -287,6 +300,21 @@ async function handleProxy(
       : joinedPath === 'agent/remittance/identity/upload'
         ? IDENTITY_UPLOAD_UPSTREAM_TIMEOUT_MS
         : UPSTREAM_TIMEOUT_MS
+
+  // Dev-only: force the execute-generic timeout so the send/pay recovery UX can
+  // be exercised locally without a slow backend. The pause lets the proxy's own
+  // AbortSignal timeout fire, so the real UPSTREAM_TIMEOUT shape is returned.
+  if (
+    DEV_SIMULATE_EXECUTE_TIMEOUT &&
+    !IS_PROD &&
+    joinedPath === 'agent/action/execute-generic'
+  ) {
+    console.warn(
+      `[dev] Simulating execute-generic timeout: pausing ${DEV_SIMULATE_EXECUTE_TIMEOUT_MS}ms (upstream timeout ${upstreamTimeoutMs}ms)`
+    )
+    await new Promise((resolve) => setTimeout(resolve, DEV_SIMULATE_EXECUTE_TIMEOUT_MS))
+  }
+
   try {
     upstreamRes = await fetch(target.toString(), {
       method,
@@ -301,7 +329,7 @@ async function handleProxy(
       error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
     const timeoutMessage =
       joinedPath === 'agent/action/execute-generic'
-        ? 'Payout response timed out. Its final status is uncertain; retry with the same idempotency key.'
+        ? 'Operation timed out. Its final status is uncertain; retry with the same idempotency key.'
         : joinedPath === 'agent/remittance/identity/upload'
           ? 'Identity upload timed out. Please try again.'
           : 'Upstream request timed out.'

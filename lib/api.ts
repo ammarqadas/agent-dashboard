@@ -4,6 +4,9 @@
 
 const API_BASE_URL = '/api/proxy'
 const REQUEST_TIMEOUT_MS = 30_000
+// Browser-side timeout for the execute-generic send/pay request. Env-adjustable
+// (NEXT_PUBLIC_*) so the CLIENT_TIMEOUT path can be exercised in dev testing.
+const EXECUTE_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_SEND_TIMEOUT_MS ?? 80_000)
 // Identity upload validates and re-encodes two images upstream; give it
 // more headroom than the default request window.
 const IDENTITY_UPLOAD_TIMEOUT_MS = 95_000
@@ -365,21 +368,29 @@ class ApiClient {
   }
 
   // Send Remittance — POST /api/agent/action/execute-generic
-  async agentRemittanceSend(networkKey: string, payload: {
-    senderName: string
-    senderMobile: string
-    receiverName: string
-    receiverMobile: string
-    amount: number
-    currency: string | number
-    notes?: string
-    commission?: number
-    totalAmount?: number
-    searchToken?: string
-  }) {
+  // Idempotency-Key is mandatory: a timed-out send must be replayed with the
+  // same key so the upstream outcome is reconciled instead of duplicated.
+  async agentRemittanceSend(
+    networkKey: string,
+    payload: {
+      senderName: string
+      senderMobile: string
+      receiverName: string
+      receiverMobile: string
+      amount: number
+      currency: string | number
+      notes?: string
+      commission?: number
+      totalAmount?: number
+      searchToken?: string
+    },
+    idempotencyKey: string
+  ) {
     return this.request('/agent/action/execute-generic', {
       method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify({ networkKey, configType: 'send', ...payload }),
+      timeoutMs: EXECUTE_TIMEOUT_MS,
     })
   }
 
@@ -457,7 +468,7 @@ class ApiClient {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify({ networkKey, configType: 'pay', ...payload }),
-      timeoutMs: 80_000,
+      timeoutMs: EXECUTE_TIMEOUT_MS,
     })
   }
 

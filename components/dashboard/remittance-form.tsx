@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import {
   Select,
@@ -27,6 +28,74 @@ import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
 import { formatReceiptTimestamp, pickString } from "@/lib/utils"
 import { SharePdfButton } from "@/components/receipt/share-pdf-button"
+
+type SendState = "idle" | "submitting" | "checking" | "uncertain" | "in_progress" | "failed"
+
+const SEND_ATTEMPT_TTL_MS = 24 * 60 * 60 * 1000
+
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID()
+  }
+  return `send-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`
+}
+
+function sendAttemptFingerprint(data: {
+  distWallet?: string | number
+  senderName: string
+  senderMobile: string
+  receiverName: string
+  receiverMobile: string
+  amount: number
+  currencyCode: string
+  notes?: string
+}): string {
+  const enc = encodeURIComponent
+  return [
+    "send",
+    String(data.distWallet ?? ""),
+    data.senderName.trim(),
+    data.senderMobile.trim(),
+    data.receiverName.trim(),
+    data.receiverMobile.trim(),
+    String(data.amount),
+    data.currencyCode,
+    (data.notes || "").trim(),
+  ].map(enc).join("|")
+}
+
+function sendAttemptStorageKey(fingerprint: string): string {
+  return `remittance-send:${fingerprint}`
+}
+
+function getOrCreateSendKey(fingerprint: string): string {
+  const storageKey = sendAttemptStorageKey(fingerprint)
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(storageKey) || "null") as {
+      key?: string
+      createdAt?: number
+    } | null
+    if (
+      stored?.key &&
+      typeof stored.createdAt === "number" &&
+      Date.now() - stored.createdAt < SEND_ATTEMPT_TTL_MS
+    ) {
+      return stored.key
+    }
+  } catch {}
+
+  const key = newIdempotencyKey()
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify({ key, createdAt: Date.now() }))
+  } catch {}
+  return key
+}
+
+function clearSendKey(fingerprint: string) {
+  try {
+    sessionStorage.removeItem(sendAttemptStorageKey(fingerprint))
+  } catch {}
+}
 
 export function RemittanceForm() {
   const [formData, setFormData] = useState({
@@ -73,6 +142,18 @@ export function RemittanceForm() {
     }
   } | null>(null)
 
+  // Send outcome state machine — mirrors the pay flow so a timed-out send is
+  // reconciled against the upstream (same idempotency key) instead of retried
+  // blindly into a duplicate operation.
+  const [sendState, setSendState] = useState<SendState>("idle")
+  const [sendMessage, setSendMessage] = useState("")
+  const sendInFlightRef = useRef(false)
+  const sendRecoveryTimerRef = useRef<number | null>(null)
+  const sendKeyRef = useRef<string | null>(null)
+  const sendFingerprintRef = useRef("")
+
+  const sendUnresolved = ["submitting", "checking", "uncertain", "in_progress"].includes(sendState)
+
   const normalizeMobile = (mob: string) => {
     if (!mob) return mob
     const clean = mob.replace(/^\+?966/, "").replace(/^0/, "")
@@ -87,6 +168,20 @@ export function RemittanceForm() {
     } catch {
       setAgentName("وكيل")
     }
+  }, [])
+
+  useEffect(() => {
+    if (!sendUnresolved) return
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", warnBeforeLeave)
+    return () => window.removeEventListener("beforeunload", warnBeforeLeave)
+  }, [sendUnresolved])
+
+  useEffect(() => () => {
+    if (sendRecoveryTimerRef.current !== null) window.clearTimeout(sendRecoveryTimerRef.current)
   }, [])
 
   useEffect(() => {
@@ -144,6 +239,14 @@ export function RemittanceForm() {
   const selectedNetwork = distWallets.find(w => w.key === formData.distWallet)
 
   const handleReset = () => {
+    if (sendUnresolved) {
+      toast.warning("تحقق من نتيجة عملية الإرسال الحالية قبل بدء إرسال جديد")
+      return
+    }
+    if (sendRecoveryTimerRef.current !== null) {
+      window.clearTimeout(sendRecoveryTimerRef.current)
+      sendRecoveryTimerRef.current = null
+    }
     setFormData({
       senderName: '',
       senderMobile: '',
@@ -158,10 +261,21 @@ export function RemittanceForm() {
     setSuccessDismissed(false)
     setCommissionResult(null)
     setConfirmData(null)
+    if (sendKeyRef.current && sendFingerprintRef.current) {
+      clearSendKey(sendFingerprintRef.current)
+    }
+    sendKeyRef.current = null
+    sendFingerprintRef.current = ""
+    setSendState("idle")
+    setSendMessage("")
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (sendUnresolved) {
+      toast.warning("تحقق من نتيجة عملية الإرسال الحالية قبل بدء إرسال جديد")
+      return
+    }
     setSuccess(null)
     setSuccessDismissed(false)
     setIsLoading(true)
@@ -238,71 +352,200 @@ export function RemittanceForm() {
     }
   }
 
-  const handleConfirmSend = async () => {
-    if (!confirmData) return
+  const submitSend = async (confirmDataToSend: typeof confirmData, recoveryCheck = false) => {
+    if (!confirmDataToSend || sendInFlightRef.current) return false
+    if (recoveryCheck && sendRecoveryTimerRef.current !== null) {
+      window.clearTimeout(sendRecoveryTimerRef.current)
+      sendRecoveryTimerRef.current = null
+    }
+
+    sendInFlightRef.current = true
     setSuccess(null)
     setSuccessDismissed(false)
     setIsLoading(true)
+    setSendState(recoveryCheck ? "checking" : "submitting")
+    setSendMessage(recoveryCheck ? "جاري التحقق من نتيجة عملية الإرسال السابقة..." : "جاري إرسال الحوالة...")
+
+    // One idempotency key per send attempt — reused across timeout retries so
+    // the upstream reconciles instead of duplicating.
+    const fingerprint = sendAttemptFingerprint({
+      distWallet: confirmDataToSend.distWallet,
+      senderName: confirmDataToSend.senderName,
+      senderMobile: confirmDataToSend.senderMobile,
+      receiverName: confirmDataToSend.receiverName,
+      receiverMobile: confirmDataToSend.receiverMobile,
+      amount: confirmDataToSend.amount,
+      currencyCode: confirmDataToSend.currencyCode,
+      notes: confirmDataToSend.notes,
+    })
+    if (!sendKeyRef.current || sendFingerprintRef.current !== fingerprint) {
+      sendKeyRef.current = getOrCreateSendKey(fingerprint)
+      sendFingerprintRef.current = fingerprint
+    }
+    const idempotencyKey = sendKeyRef.current
+    let scheduleRecovery = false
 
     try {
-      const response = await apiClient.agentRemittanceSend(String(confirmData.distWallet || "unified-network"), {
-        senderName: confirmData.senderName,
-        senderMobile: confirmData.senderMobile,
-        receiverName: confirmData.receiverName,
-        receiverMobile: confirmData.receiverMobile,
-        amount: confirmData.amount,
-        currency: confirmData.currencyCode,
-        notes: confirmData.notes,
-        ...(confirmData.commission ? {
-          commission: confirmData.commission.totalCommission,
-          totalAmount: confirmData.commission.totalAmount,
-          searchToken: confirmData.commission.searchToken,
+      const response = await apiClient.agentRemittanceSend(String(confirmDataToSend.distWallet || "unified-network"), {
+        senderName: confirmDataToSend.senderName,
+        senderMobile: confirmDataToSend.senderMobile,
+        receiverName: confirmDataToSend.receiverName,
+        receiverMobile: confirmDataToSend.receiverMobile,
+        amount: confirmDataToSend.amount,
+        currency: confirmDataToSend.currencyCode,
+        notes: confirmDataToSend.notes,
+        ...(confirmDataToSend.commission ? {
+          commission: confirmDataToSend.commission.totalCommission,
+          totalAmount: confirmDataToSend.commission.totalAmount,
+          searchToken: confirmDataToSend.commission.searchToken,
         } : {}),
-      })
+      }, idempotencyKey)
 
       if (response.success) {
         const resData: Record<string, any> =
           typeof response.data === "object" && response.data !== null ? response.data : {}
+        clearSendKey(fingerprint)
+        sendKeyRef.current = null
+        sendFingerprintRef.current = ""
+        setSendState("idle")
+        setSendMessage("")
         setSuccess({
           ...resData,
+          amount:
+            resData.amount ??
+            resData.baseAmount ??
+            resData.totalAmount ??
+            confirmDataToSend.amount ??
+            0,
+          currency:
+            resData.currency ??
+            resData.currencyCode ??
+            confirmDataToSend.currencyCode ??
+            "",
+          duplicated: !!resData.duplicate || !!response.idempotencyReplay,
           transactionId:
             pickString(resData, ["transactionId", "txId", "transaction_id", "operationId", "operation_id", "id"]) ?? "",
           expressid:
             pickString(resData, ["expressid", "expressId", "expressID", "remittanceId", "remittance_id"]) ?? "",
-          senderName: confirmData.senderName || resData.senderName,
+          senderName: confirmDataToSend.senderName || resData.senderName,
           senderMobile:
-            confirmData.senderMobile ||
+            confirmDataToSend.senderMobile ||
             formData.senderMobile ||
             pickString(resData, ["senderMobile", "sender_mobile", "senderPhone"]) ||
             "",
-          receiverName: confirmData.receiverName || resData.receiverName,
+          receiverName: confirmDataToSend.receiverName || resData.receiverName,
           receiverMobile:
-            confirmData.receiverMobile ||
+            confirmDataToSend.receiverMobile ||
             formData.receiverMobile ||
             pickString(resData, ["receiverMobile", "receiver_mobile", "receiverPhone"]) ||
             "",
-          notes: confirmData.notes,
-          networkName: distWallets.find((w: any) => w.key === confirmData.distWallet)?.name || String(confirmData.distWallet || "—"),
+          notes: confirmDataToSend.notes,
+          networkName: distWallets.find((w: any) => w.key === confirmDataToSend.distWallet)?.name || String(confirmDataToSend.distWallet || "—"),
           sentAt: new Date(),
         })
         setConfirmData(null)
         setShowDialog(false)
         setCommissionResult(null)
         setTimeout(() => setSuccessDismissed(true), 8000)
-      } else {
-        toast.error(response.message || "فشل في إرسال الحوالة")
-        setShowDialog(false)
+        return true
       }
+
+      if (response.code === "PAYMENT_IN_PROGRESS") {
+        setSendState("in_progress")
+        setSendMessage("عملية الإرسال قيد المعالجة. لا تبدأ عملية جديدة؛ تحقق من نتيجة العملية بعد قليل.")
+        toast.warning("الإرسال قيد المعالجة — لا تُعد المحاولة الآن، تحقق من المبلغ المخصوم بعد قليل")
+        return false
+      }
+      if (response.code === "IDEMPOTENCY_KEY_REUSED") {
+        clearSendKey(fingerprint)
+        sendKeyRef.current = null
+        sendFingerprintRef.current = ""
+        setSendState("failed")
+        setSendMessage("تعذر متابعة العملية لأن مفتاحها مرتبط بعملية سابقة. أعد إرسال الحوالة من جديد.")
+        toast.error("مفتاح العملية مستخدم سابقاً — أعد إدخال البيانات وابدأ إرسالاً جديداً")
+        return false
+      }
+      if (
+        response.code === "UPSTREAM_TIMEOUT" ||
+        response.code === "CLIENT_TIMEOUT" ||
+        response.code === "UPSTREAM_UNAVAILABLE"
+      ) {
+        setSendState("uncertain")
+        setSendMessage("انتهت مهلة الاستجابة وقد تكون الحوالة أُرسلت. سيتم التحقق تلقائياً بنفس مفتاح العملية.")
+        setShowDialog(false)
+        scheduleRecovery = !recoveryCheck
+        toast.warning("انتهت مهلة الاستجابة. لا تُعد الإرسال؛ جارٍ التحقق من النتيجة بنفس مفتاح العملية.")
+        return false
+      }
+
+      setSendState("failed")
+      setSendMessage(response.message || "فشل في إرسال الحوالة")
+      toast.error(response.message || "فشل في إرسال الحوالة")
+      return false
     } catch (err: any) {
-      toast.error(err.message || "حدث خطأ غير متوقع")
-      setShowDialog(false)
+      setSendState("failed")
+      setSendMessage(err.message || "حدث خطأ أثناء إرسال الحوالة")
+      toast.error(err.message || "حدث خطأ أثناء إرسال الحوالة")
+      return false
     } finally {
+      sendInFlightRef.current = false
       setIsLoading(false)
+      if (scheduleRecovery) {
+        sendRecoveryTimerRef.current = window.setTimeout(() => {
+          sendRecoveryTimerRef.current = null
+          void submitSend(confirmDataToSend, true)
+        }, 2500)
+      }
     }
+  }
+
+  const handleConfirmSend = async () => {
+    if (!confirmData || sendInFlightRef.current) return
+    await submitSend(confirmData, false)
   }
 
   return (
     <>
+      {sendState !== "idle" && (
+        <Alert
+          variant={sendState === "failed" ? "destructive" : "default"}
+          className={`mb-4 ${sendUnresolved ? "border-amber-400 bg-amber-50 text-amber-900" : ""}`}
+        >
+          {sendState === "checking" ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <AlertTriangle className="h-4 w-4" />
+          )}
+          <AlertTitle>
+            {sendState === "checking"
+              ? "جاري التحقق من نتيجة الإرسال"
+              : sendState === "in_progress"
+                ? "الإرسال قيد المعالجة"
+                : sendState === "uncertain"
+                  ? "نتيجة الإرسال غير مؤكدة"
+                  : sendState === "submitting"
+                    ? "جاري إرسال الحوالة"
+                    : "تعذر إتمام الإرسال"}
+          </AlertTitle>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>{sendMessage}</span>
+            {sendUnresolved && sendKeyRef.current && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isLoading || sendState === "checking"}
+                onClick={() => void submitSend(confirmData, true)}
+                className="shrink-0 bg-background"
+              >
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                التحقق من نتيجة الإرسال
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left: Main Form / Success Result */}
         <div className="lg:col-span-2">
@@ -316,7 +559,11 @@ export function RemittanceForm() {
                   </div>
                   <div>
                     <h2 className="text-lg font-bold">تم إرسال الحوالة بنجاح</h2>
-                    <p className="text-sm text-muted-foreground">يمكنك طباعة الإيصال أو إرسال حوالة جديدة</p>
+                    <p className="text-sm text-muted-foreground">
+                      {success.duplicated
+                        ? "هذه العملية أُرسلت مسبقاً — تم عرض نتيجة العملية السابقة لتجنب التكرار"
+                        : "يمكنك طباعة الإيصال أو إرسال حوالة جديدة"}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
