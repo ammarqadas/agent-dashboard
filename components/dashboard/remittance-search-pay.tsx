@@ -36,8 +36,6 @@ import {
   AlertTriangle,
   FileImage,
   PenLine,
-  KeyRound,
-  Send,
   ShieldCheck,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -53,11 +51,11 @@ import {
   type IdentityImageSlot,
 } from "@/components/identity"
 
-type IdentityStatus = "new" | "existing" | "manual_review"
+type IdentityStatus = "new" | "existing" | "ambiguous"
 
-type IdentityPreview = {
-  fullName?: string
-  mobile?: string
+type IdentityNextAction = "pay" | "confirm_identity" | "collect_identity"
+
+type IdentityDocument = {
   documentId?: string
   type?: "national" | "passport"
   numberMasked?: string
@@ -66,6 +64,20 @@ type IdentityPreview = {
   issuePlace?: string
   hasFrontImage?: boolean
   hasBackImage?: boolean
+}
+
+type IdentityPreview = IdentityDocument & {
+  fullName?: string
+  mobile?: string
+  documentId?: string
+  status?: string
+}
+
+type IdentityCandidate = {
+  identityId: string
+  status?: string
+  preview?: { fullName?: string; mobile?: string }
+  documents?: IdentityDocument[]
 }
 
 type SearchResult = {
@@ -80,8 +92,8 @@ type SearchResult = {
   receiverName?: string
   receiverMobile?: string
   identityStatus: IdentityStatus
-  identityNextAction?: string
-  candidateToken?: string
+  identityNextAction?: IdentityNextAction
+  candidates: IdentityCandidate[]
   identity?: IdentityPreview
 }
 
@@ -96,6 +108,7 @@ type PayResult = {
 
 type IdentityAuthorization = {
   token: string
+  identityId: string
   idempotencyKey: string
 }
 
@@ -103,33 +116,29 @@ type PaymentState = "idle" | "submitting" | "checking" | "uncertain" | "in_progr
 
 const PAYOUT_ATTEMPT_TTL_MS = 24 * 60 * 60 * 1000
 
-function identityBlockedMessage(status: string): string {
-  switch (status) {
-    case "existing":
-      return "هوية المستلم موثقة مسبقاً ويتطلب الدفع تحققاً عبر رمز OTP"
-    case "manual_review":
-      return "الحوالة قيد المراجعة اليدوية — تعذر إتمام الدفع"
-    default:
-      return "تعذر تحديد متطلبات الهوية — يرجى البحث من جديد"
-  }
+function identityBlockedMessage(): string {
+  return "تعذر تحديد متطلبات الهوية — يرجى البحث من جديد"
 }
 
 // Single source of truth for what each identity decision requires before payout:
-// - existing: identity + document on file → OTP only.
-// - new:      no identity record → collect identity + upload images.
-// - manual_review / unknown: blocked.
+// - existing:  one identity on file → the search already bound a payout token.
+// - ambiguous: several identities on file → the agent picks one, then pays.
+// - new:       no identity record → collect identity + upload images.
+// - unknown:   blocked.
 function identityFlow(status: IdentityStatus): {
-  otp: boolean
   upload: boolean
   blocked: boolean
+  select: boolean
 } {
   switch (status) {
     case "existing":
-      return { otp: true, upload: false, blocked: false }
+      return { upload: false, blocked: false, select: false }
+    case "ambiguous":
+      return { upload: false, blocked: false, select: true }
     case "new":
-      return { otp: false, upload: true, blocked: false }
+      return { upload: true, blocked: false, select: false }
     default:
-      return { otp: false, upload: false, blocked: true }
+      return { upload: false, blocked: true, select: false }
   }
 }
 
@@ -288,6 +297,85 @@ function SearchRemittanceCard({
 
 // ─── Step 2: Remittance Result + Identity + Preview Sidebar ───────────
 
+const STATUS_BADGES: Record<string, string> = {
+  verified: "هوية موثقة",
+  pending: "قيد المراجعة",
+  rejected: "مرفوضة",
+}
+
+// Lets the agent disambiguate between the identities matched by the search.
+// The selected identity is what the payout is authorized against.
+function IdentityCandidatePicker({
+  candidates,
+  selectedId,
+  disabled,
+  onSelect,
+}: {
+  candidates: IdentityCandidate[]
+  selectedId: string
+  disabled?: boolean
+  onSelect: (identityId: string) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-bold text-muted-foreground">الهويات المطابقة</p>
+      <div className="space-y-2" role="radiogroup" aria-label="الهويات المطابقة">
+        {candidates.map((candidate) => {
+          const document = candidate.documents?.[0]
+          const active = String(candidate.identityId) === String(selectedId)
+          return (
+            <button
+              key={candidate.identityId}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              disabled={disabled}
+              onClick={() => onSelect(String(candidate.identityId))}
+              className={`w-full rounded-xl border p-3 text-start transition-colors disabled:opacity-60 ${
+                active
+                  ? "border-emerald-500 bg-emerald-100/60"
+                  : "border-border/70 bg-background/80 hover:border-primary/40"
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <span
+                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                    active ? "border-emerald-600 bg-emerald-600" : "border-border"
+                  }`}
+                  aria-hidden="true"
+                >
+                  {active && <CheckCircle2 className="h-3 w-3 text-white" />}
+                </span>
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold">
+                      {candidate.preview?.fullName || "—"}
+                    </p>
+                    {candidate.status && (
+                      <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                        {STATUS_BADGES[candidate.status] || candidate.status}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    {candidate.preview?.mobile && (
+                      <span className="font-mono" dir="ltr">{candidate.preview.mobile}</span>
+                    )}
+                    {document?.type && <span>{ID_TYPE_LABELS[document.type]}</span>}
+                    {document?.numberMasked && (
+                      <span className="font-mono" dir="ltr">{document.numberMasked}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function RemittanceResultStep({
   searchResult,
   idNumber,
@@ -301,9 +389,15 @@ function RemittanceResultStep({
   identityComplete,
   isPaying,
   paymentBlocked,
-  isSendingOtp,
-  otpResendSeconds,
+  isConfirming,
+  confirmIdNumber,
   networks,
+  selectedIdentityId,
+  selectedStatus,
+  identityDetails,
+  onCandidateSelect,
+  onConfirmIdNumberChange,
+  onConfirmIdentity,
   onIdNumberChange,
   onIdTypeChange,
   onIssueDateChange,
@@ -312,7 +406,6 @@ function RemittanceResultStep({
   imageFiles,
   onImageChange,
   onPaySubmit,
-  onSendOtp,
   onReset,
 }: {
   searchResult: SearchResult
@@ -327,9 +420,22 @@ function RemittanceResultStep({
   identityComplete: boolean
   isPaying: boolean
   paymentBlocked: boolean
-  isSendingOtp: boolean
-  otpResendSeconds: number
+  isConfirming: boolean
+  confirmIdNumber: string
   networks: any[]
+  selectedIdentityId: string
+  selectedStatus?: string
+  identityDetails: {
+    fullName?: string
+    idNumber?: string
+    type?: "national" | "passport"
+    issueDate?: string
+    expiryDate?: string
+    issuePlace?: string
+  }
+  onCandidateSelect: (identityId: string) => void
+  onConfirmIdNumberChange: (v: string) => void
+  onConfirmIdentity: () => void
   onIdNumberChange: (v: string) => void
   onIdTypeChange: (v: "national" | "passport") => void
   onIssueDateChange: (v: string) => void
@@ -338,7 +444,6 @@ function RemittanceResultStep({
   imageFiles: IdentityImageFiles
   onImageChange: (slot: IdentityImageSlot, file: File | null) => void
   onPaySubmit: (e: React.FormEvent) => void
-  onSendOtp: () => void
   onReset: () => void
 }) {
   const networkName = networks.find(n => n.key === searchResult.networkKey)?.name || searchResult.networkKey
@@ -360,9 +465,11 @@ function RemittanceResultStep({
                   <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">تأكيد</Badge>
                 </div>
                 <CardDescription>
-                  {searchResult.identityStatus === "existing"
-                    ? "تحقق من هوية المستلم عبر رمز OTP ثم أكمل الدفع"
-                    : "تأكد من البيانات ثم أدخل هوية المستلم وصورها للدفع"}
+                  {flow.upload
+                    ? "تأكد من البيانات ثم أدخل هوية المستلم وصورها للدفع"
+                    : flow.select
+                      ? "تطابق أكثر من هوية مع المستلم — تحقق برقم الهوية ثم أكمل الدفع"
+                      : "راجع هوية المستلم المسجلة وتحقق من رقم هويتها ثم أكمل الدفع"}
                 </CardDescription>
               </div>
             </div>
@@ -422,73 +529,114 @@ function RemittanceResultStep({
               </div>
             </div>
 
-            {/* Identity: OTP for an existing identity (or to resolve its document), otherwise collect a new identity. */}
-            {flow.otp ? (
+            {/* Identity on file: the search already bound a payout authorization
+                token — the agent reviews it (and picks a candidate when several
+                identities match) then pays. */}
+            {!flow.upload && !flow.blocked ? (
               <form onSubmit={onPaySubmit} className="space-y-5">
-                <div className={`overflow-hidden rounded-2xl border ${identityLocked ? "border-emerald-500/40 bg-emerald-50/70" : "border-primary/30 bg-primary/[0.035]"}`}>
+                {flow.select && (
+                  <div className="rounded-xl border border-amber-500/40 bg-amber-50 p-4 flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-amber-700">تم العثور على عدة هويات مطابقة</p>
+                      <p className="text-sm text-amber-700/80 mt-0.5">
+                        اختر هوية المستلم الصحيحة قبل إتمام الدفع
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="overflow-hidden rounded-2xl border border-emerald-500/40 bg-emerald-50/70">
                   <div className="space-y-4 p-4 sm:p-5">
                     <div className="flex items-start gap-3">
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${identityLocked ? "bg-emerald-600 text-white shadow-sm" : "bg-primary/10 text-primary"}`}>
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
                         <ShieldCheck className="h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-bold">هوية المستلم مسجلة مسبقاً</p>
-                          <Badge className={identityLocked ? "bg-emerald-600 hover:bg-emerald-600" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/10"}>
-                            {identityLocked ? "تم التحقق" : "هوية موثقة"}
+                          <Badge className="bg-emerald-600 hover:bg-emerald-600">
+                            {STATUS_BADGES[selectedStatus || ""] || "مسجلة"}
                           </Badge>
                         </div>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                          تم العثور على هوية مرتبطة ببيانات المستلم. راجع المعلومات ثم تحقق من رقم الجوال قبل الدفع.
+                          {flow.select
+                            ? "طابق أكثر من هوية مع بيانات المستلم — تحقق برقم هوية المستلم لتحديد الهوية الصحيحة."
+                            : "تم العثور على هوية مرتبطة ببيانات المستلم. تحقق برقم هوية المستلم قبل الدفع."}
                         </p>
                       </div>
                     </div>
 
-                    <IdentityDetailsGrid details={{
-                      fullName: searchResult.identity?.fullName || searchResult.receiverName,
-                      idNumber: searchResult.identity?.numberMasked,
-                      type: searchResult.identity?.type,
-                      issueDate: searchResult.identity?.issueDate,
-                      expiryDate: searchResult.identity?.expiryDate,
-                      issuePlace: searchResult.identity?.issuePlace,
-                    }} />
+                    {flow.select && (
+                      <IdentityCandidatePicker
+                        candidates={searchResult.candidates}
+                        selectedId={selectedIdentityId}
+                        disabled={identityLocked || isConfirming || isPaying || paymentBlocked}
+                        onSelect={onCandidateSelect}
+                      />
+                    )}
+
+                    <IdentityDetailsGrid details={identityDetails} />
                   </div>
 
                   <div className={`border-t px-4 py-3 sm:px-5 ${identityLocked ? "border-emerald-500/20 bg-emerald-100/50" : "border-primary/15 bg-background/70"}`}>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    {identityLocked ? (
                       <div className="flex items-start gap-2.5">
-                        <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${identityLocked ? "bg-emerald-600 text-white" : "bg-primary text-primary-foreground"}`}>
-                          {identityLocked ? <CheckCircle2 className="h-4 w-4" /> : "1"}
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                          <CheckCircle2 className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold">{identityLocked ? "تم التحقق من المستلم" : "تحقق عبر رمز الجوال"}</p>
+                          <p className="text-sm font-bold">تم التحقق من رقم هوية المستلم</p>
                           <p className="mt-0.5 text-xs text-muted-foreground">
-                            {identityLocked
-                              ? "أصبحت الحوالة جاهزة للدفع"
-                              : <>سيُرسل الرمز إلى <span className="font-mono font-semibold text-foreground" dir="ltr">{searchResult.identity?.mobile || searchResult.receiverMobile || "رقم المستلم"}</span></>}
+                            الحوالة جاهزة للدفع — الترخيص مرتبط بالهوية ويُستخدم لمرة واحدة
                           </p>
                         </div>
                       </div>
-                      {!identityLocked && (
-                        <Button type="button" onClick={onSendOtp} disabled={isSendingOtp || otpResendSeconds > 0} className="h-10 w-full shrink-0 sm:w-auto">
-                          {isSendingOtp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                          {isSendingOtp
-                            ? "جاري إرسال الرمز..."
-                            : otpResendSeconds > 0
-                              ? `إعادة المحاولة بعد ${otpResendSeconds} ثانية`
-                              : "إرسال رمز التحقق"}
-                        </Button>
-                      )}
-                    </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-2.5">
+                          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                            1
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold">تحقق من هوية المستلم</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              أدخل رقم الهوية كما هو مدوّن في بطاقة المستلم لمطابقته مع السجل
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Input
+                            value={confirmIdNumber}
+                            onChange={(event) => onConfirmIdNumberChange(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault()
+                                onConfirmIdentity()
+                              }
+                            }}
+                            placeholder="رقم الهوية"
+                            dir="ltr"
+                            inputMode="text"
+                            autoComplete="off"
+                            disabled={isConfirming || isPaying || paymentBlocked}
+                            className="flex-1 font-mono"
+                            aria-label="رقم هوية المستلم للتحقق"
+                          />
+                          <Button
+                            type="button"
+                            onClick={onConfirmIdentity}
+                            disabled={isConfirming || isPaying || paymentBlocked || !confirmIdNumber.trim()}
+                            className="h-10 shrink-0"
+                          >
+                            {isConfirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                            {isConfirming ? "جاري التحقق..." : "تحقق"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                {!identityLocked && (
-                  <p id="existing-identity-payment-help" className="flex items-center gap-1.5 text-xs text-amber-700">
-                    <KeyRound className="h-3.5 w-3.5" />
-                    أرسل رمز التحقق وأدخله لتفعيل دفع الحوالة
-                  </p>
-                )}
 
                 <div className="flex flex-col-reverse gap-3 sm:flex-row">
                   <Button type="button" variant="outline" onClick={onReset} disabled={isPaying || paymentBlocked} className="h-11 sm:w-auto">
@@ -498,11 +646,10 @@ function RemittanceResultStep({
                   <Button
                     type="submit"
                     disabled={isPaying || paymentBlocked || !identityComplete}
-                    aria-describedby={!identityLocked ? "existing-identity-payment-help" : undefined}
                     className="h-11 flex-1 font-semibold bg-gradient-to-r from-primary to-emerald-600 hover:to-emerald-700"
                   >
                     <Coins className="h-4 w-4" />
-                    {identityLocked ? "دفع الحوالة" : "الدفع بعد التحقق"}
+                    دفع الحوالة
                   </Button>
                 </div>
               </form>
@@ -512,7 +659,7 @@ function RemittanceResultStep({
                 <div>
                   <p className="text-sm font-bold text-amber-700">لا يمكن إتمام الدفع</p>
                   <p className="text-sm text-amber-700/80 mt-0.5">
-                    {identityBlockedMessage(searchResult.identityStatus)}
+                    {identityBlockedMessage()}
                   </p>
                 </div>
               </div>
@@ -727,9 +874,9 @@ function RemittanceResultStep({
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-[11px] font-bold tracking-wide text-muted-foreground">هوية المستلم</span>
-                  {flow.otp && (
+                  {!flow.upload && !flow.blocked && (
                     <Badge className="mr-auto h-5 border-emerald-200 bg-emerald-50 px-1.5 text-[9px] text-emerald-700 hover:bg-emerald-50">
-                      موثقة
+                      {STATUS_BADGES[selectedStatus || ""] || "مسجلة"}
                     </Badge>
                   )}
                 </div>
@@ -812,104 +959,6 @@ function RemittanceResultStep({
         </Card>
       </div>
     </div>
-  )
-}
-
-// ─── Existing Identity OTP Dialog ─────────────────────────────────────
-
-function IdentityOtpDialog({
-  open,
-  onOpenChange,
-  destinationMasked,
-  otp,
-  resendSeconds,
-  isSending,
-  isVerifying,
-  isPaying,
-  paymentAuthorized,
-  onOtpChange,
-  onResend,
-  onVerify,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  destinationMasked?: string
-  otp: string
-  resendSeconds: number
-  isSending: boolean
-  isVerifying: boolean
-  isPaying: boolean
-  paymentAuthorized: boolean
-  onOtpChange: (value: string) => void
-  onResend: () => void
-  onVerify: (event: React.FormEvent) => void
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <form onSubmit={onVerify} className="space-y-5">
-          <DialogHeader>
-            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <KeyRound className="h-6 w-6" />
-            </div>
-            <DialogTitle className="text-center">التحقق من هوية المستلم</DialogTitle>
-            <DialogDescription className="text-center">
-              أدخل رمز التحقق المرسل إلى
-              <span className="mr-1 font-mono font-semibold text-foreground" dir="ltr">
-                {destinationMasked || "رقم المستلم"}
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <Label htmlFor="identityOtp">رمز التحقق</Label>
-            <Input
-              id="identityOtp"
-              value={otp}
-              onChange={(event) => onOtpChange(event.target.value.replace(/\D/g, "").slice(0, 6))}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              placeholder="000000"
-              dir="ltr"
-              autoFocus
-              className="h-12 text-center font-mono text-xl tracking-[0.45em]"
-              disabled={isVerifying || isPaying || paymentAuthorized}
-            />
-            <p className="text-center text-xs text-muted-foreground">
-              الرمز صالح لمدة خمس دقائق
-            </p>
-          </div>
-
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
-            <Button
-              type="submit"
-              disabled={isVerifying || isPaying || (!paymentAuthorized && otp.length !== 6)}
-              className="w-full"
-            >
-              {(isVerifying || isPaying) && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isVerifying
-                ? "جاري التحقق..."
-                : isPaying
-                  ? "جاري الدفع..."
-                  : "تحقق ومتابعة الدفع"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onResend}
-              disabled={isSending || isVerifying || isPaying || paymentAuthorized || resendSeconds > 0}
-              className="w-full"
-            >
-              {isSending && <Loader2 className="h-4 w-4 animate-spin" />}
-              {resendSeconds > 0
-                ? `إعادة الإرسال بعد ${resendSeconds} ثانية`
-                : "إعادة إرسال الرمز"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }
 
@@ -1325,14 +1374,15 @@ export function RemittanceSearchPay() {
   const [paidAt, setPaidAt] = useState<Date>(new Date())
 
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
-  const [showOtpDialog, setShowOtpDialog] = useState(false)
-  const [otp, setOtp] = useState("")
-  const [otpDestination, setOtpDestination] = useState("")
-  const [otpResendSeconds, setOtpResendSeconds] = useState(0)
-  const [isSendingOtp, setIsSendingOtp] = useState(false)
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
   const [isNetworksLoading, setIsNetworksLoading] = useState(true)
   const [agentName, setAgentName] = useState("")
+
+  // Ambiguous matches: the identity the payout is currently authorized against
+  // (bound at search time) vs. the one the agent picked in the list.
+  const [selectedIdentityId, setSelectedIdentityId] = useState("")
+  // Full ID number typed by the agent from the receiver's physical card.
+  const [confirmIdNumber, setConfirmIdNumber] = useState("")
+  const [isConfirming, setIsConfirming] = useState(false)
 
   useEffect(() => {
     try {
@@ -1350,6 +1400,29 @@ export function RemittanceSearchPay() {
   const flow = searchResult ? identityFlow(searchResult.identityStatus) : null
   const identityLocked = !!identityAuth
   const paymentUnresolved = ["uncertain", "checking", "in_progress"].includes(paymentState)
+
+  // Details of the candidate currently selected in the ambiguous picker (falls
+  // back to the identity matched by the search).
+  const selectedCandidate = searchResult?.candidates.find(
+    (candidate) => String(candidate.identityId) === String(selectedIdentityId),
+  )
+  const selectedStatus = selectedCandidate?.status ?? searchResult?.identity?.status
+  const identityDetails = {
+    fullName:
+      selectedCandidate?.preview?.fullName ||
+      searchResult?.identity?.fullName ||
+      searchResult?.receiverName,
+    idNumber:
+      selectedCandidate?.documents?.[0]?.numberMasked ?? searchResult?.identity?.numberMasked,
+    type:
+      selectedCandidate?.documents?.[0]?.type ?? searchResult?.identity?.type,
+    issueDate:
+      selectedCandidate?.documents?.[0]?.issueDate ?? searchResult?.identity?.issueDate,
+    expiryDate:
+      selectedCandidate?.documents?.[0]?.expiryDate ?? searchResult?.identity?.expiryDate,
+    issuePlace:
+      selectedCandidate?.documents?.[0]?.issuePlace ?? searchResult?.identity?.issuePlace,
+  }
   const identityComplete = Boolean(
     flow &&
       (flow.upload
@@ -1361,15 +1434,6 @@ export function RemittanceSearchPay() {
           identityImages.files.back
         : identityAuth)
   )
-
-  useEffect(() => {
-    if (otpResendSeconds <= 0) return
-    const timer = window.setTimeout(
-      () => setOtpResendSeconds((seconds) => Math.max(0, seconds - 1)),
-      1000
-    )
-    return () => window.clearTimeout(timer)
-  }, [otpResendSeconds])
 
   useEffect(() => {
     const unresolved = ["submitting", "checking", "uncertain", "in_progress"].includes(paymentState)
@@ -1410,6 +1474,34 @@ export function RemittanceSearchPay() {
 
 
 
+  // Existing-identity payouts have no local uploads: the stored document images
+  // are served through the cookie-authenticated proxy so the printed receipt
+  // isn't blank. The proxy resolves the document from the search workflow, so
+  // the same URL follows whichever candidate is currently authorized — `version`
+  // only defeats the browser cache after a re-selection.
+  const storedPreviews = (
+    searchToken: string,
+    doc: IdentityDocument | undefined,
+  ): { front: string | null; back: string | null } => {
+    const imageBase = `/api/proxy/agent/remittance/identity/document-image?searchToken=${encodeURIComponent(
+      searchToken,
+    )}&v=${Date.now()}`
+    return {
+      front: doc?.hasFrontImage ? `${imageBase}&slot=front` : null,
+      back: doc?.hasBackImage ? `${imageBase}&slot=back` : null,
+    }
+  }
+
+  // Fill the identity form fields from a stored document (existing/ambiguous
+  // identity, or a candidate the agent picked).
+  const applyIdentityPreview = (doc: IdentityDocument) => {
+    setIdNumber(String(doc.numberMasked || ""))
+    setIdType(doc.type === "passport" ? "passport" : "national")
+    setIssueDate(isoToDateInput(doc.issueDate))
+    setExpiryDate(isoToDateInput(doc.expiryDate))
+    setIssuePlace(String(doc.issuePlace || ""))
+  }
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     setSearchResult(null)
@@ -1434,32 +1526,19 @@ export function RemittanceSearchPay() {
         const d: any = response.data || {}
         const rem: any = d.remittance || {}
         const dec: any = d.identityDecision || {}
+        const searchToken = String(d.searchToken || "")
+        const status = (dec.status || "") as IdentityStatus
+        const candidates: IdentityCandidate[] = Array.isArray(dec.candidates) ? dec.candidates : []
+        const identity = dec.identity as IdentityPreview | undefined
+
         setIdentityAuth(null)
         setPaymentState("idle")
         setPaymentMessage("")
-        setOtp("")
-        setOtpDestination("")
-        setOtpResendSeconds(0)
         setStoredDocPreviews({ front: null, back: null })
-        if (dec.status === "existing" && dec.identity) {
-          setIdNumber(String(dec.identity.numberMasked || ""))
-          setIdType(dec.identity.type === "passport" ? "passport" : "national")
-          setIssueDate(isoToDateInput(dec.identity.issueDate))
-          setExpiryDate(isoToDateInput(dec.identity.expiryDate))
-          setIssuePlace(String(dec.identity.issuePlace || ""))
-          // Existing-identity payouts have no local uploads: fetch the stored
-          // document images through the cookie-authenticated proxy so the
-          // printed receipt isn't blank.
-          const imageBase = `/api/proxy/agent/remittance/identity/document-image?searchToken=${encodeURIComponent(String(d.searchToken || ""))}`
-          if (dec.identity.hasFrontImage) {
-            setStoredDocPreviews(prev => ({ ...prev, front: `${imageBase}&slot=front` }))
-          }
-          if (dec.identity.hasBackImage) {
-            setStoredDocPreviews(prev => ({ ...prev, back: `${imageBase}&slot=back` }))
-          }
-        }
-        setSearchResult({
-          searchToken: String(d.searchToken || ""),
+        setSelectedIdentityId("")
+
+        const result: SearchResult = {
+          searchToken,
           reference: String(rem.reference || inputRemittanceId.trim()),
           networkKey: String(rem.networkKey || selectedNetwork),
           status: rem.status,
@@ -1469,11 +1548,25 @@ export function RemittanceSearchPay() {
           senderMobile: pickString(rem.sender, ["mobile", "phone", "msisdn"]) || pickString(rem, ["senderMobile", "sender_mobile"]),
           receiverName: rem.receiver?.name ?? rem.receiverName,
           receiverMobile: pickString(rem.receiver, ["mobile", "phone", "msisdn"]) || pickString(rem, ["receiverMobile", "receiver_mobile"]),
-          identityStatus: (dec.status || "manual_review") as IdentityStatus,
+          identityStatus: status,
           identityNextAction: dec.nextAction,
-          candidateToken: dec.candidateToken,
-          identity: dec.identity,
-        })
+          candidates,
+          identity,
+        }
+        setSearchResult(result)
+
+        // Existing / ambiguous: the identity is on file but the payout token is
+        // NOT issued here — the agent must confirm the receiver's full ID
+        // number first (handleConfirmIdentity). Document images are hidden
+        // until confirmation succeeds so the number can't be read off the
+        // screen instead of the receiver's physical card; details shown are
+        // the matched identity (first candidate when ambiguous).
+        if (identity) {
+          applyIdentityPreview(identity)
+        }
+        const boundId = status === "ambiguous" ? String(candidates[0]?.identityId ?? "") : ""
+        setSelectedIdentityId(boundId)
+        setConfirmIdNumber("")
       } else {
         toast.error(response.message || "لم يتم العثور على الحوالة")
       }
@@ -1484,39 +1577,63 @@ export function RemittanceSearchPay() {
     }
   }
 
-  const handleSendOtp = async () => {
-    if (!searchResult || !flow?.otp) return
-    if (!searchResult.candidateToken) {
-      toast.error("رمز مرشح الهوية غير متاح، يرجى البحث من جديد")
+  // Confirms the receiver's identity by the full document number read off the
+  // physical card. On a match the server binds the payout to that identity and
+  // returns the single-use authorization token; for an ambiguous match the
+  // entered number — not the highlighted card — decides who gets paid.
+  const handleConfirmIdentity = async () => {
+    if (!searchResult || isConfirming || isPaying) return
+    const entered = confirmIdNumber.trim()
+    if (!entered) {
+      toast.error("أدخل رقم هوية المستلم كما هو مدوّن في بطاقته")
       return
     }
-
-    setIsSendingOtp(true)
+    setIsConfirming(true)
     try {
-      const response = await apiClient.agentRemittanceIdentityOtpSend(
+      const response = await apiClient.agentRemittanceIdentityConfirm(
         searchResult.searchToken,
-        searchResult.candidateToken
+        entered,
       )
-      if (!response.success) {
-        const retryAfterSeconds = Number((response as any).retryAfterSeconds || 0)
-        if (retryAfterSeconds > 0) setOtpResendSeconds(retryAfterSeconds)
-        toast.error(response.message || "تعذر إرسال رمز التحقق")
+      const data: any = response.data || {}
+      if (!response.success || !data.identityAuthorizationToken || !data.identityId) {
+        if (response.code === "IDENTITY_CONFIRM_LOCKED") {
+          toast.error("تم قفل التحقق بعد محاولات فاشلة متكررة — ابحث عن الحوالة من جديد")
+          handleReset()
+          return
+        }
+        toast.error(
+          response.code === "IDENTITY_CONFIRM_MISMATCH"
+            ? "رقم الهوية غير مطابق للمستلم"
+            : response.message || "تعذر التحقق من رقم الهوية",
+        )
         return
       }
-      const data = response.data || (response as any)
-      setOtp("")
-      setOtpDestination(String(data.destinationMasked || searchResult.receiverMobile || ""))
-      setOtpResendSeconds(Number(data.resendAfterSeconds) || 60)
-      setShowOtpDialog(true)
-      if (data.deliveryUncertain) {
-        toast.warning("تأخر تأكيد الإرسال. انتظر وصول الرمز أو أعد المحاولة بعد انتهاء المهلة")
-      } else {
-        toast.success("تم إرسال رمز التحقق إلى المستلم")
+      const auth = {
+        token: String(data.identityAuthorizationToken),
+        identityId: String(data.identityId),
+        idempotencyKey: getOrCreatePayoutKey(searchResult),
       }
+      setIdentityAuth(auth)
+      // Confirmation succeeded — now it's safe to reveal the stored document
+      // images. The confirmed identity decides the payout: if it differs from
+      // the card the agent was previewing, snap the display to the paid one.
+      const confirmedId = String(data.identityId)
+      const confirmedDoc =
+        searchResult.candidates.find((c) => String(c.identityId) === confirmedId)
+          ?.documents?.[0] ?? searchResult.identity
+      if (confirmedId !== selectedIdentityId) {
+        setSelectedIdentityId(confirmedId)
+      }
+      if (confirmedDoc) {
+        applyIdentityPreview(confirmedDoc)
+        setStoredDocPreviews(storedPreviews(searchResult.searchToken, confirmedDoc))
+      }
+      setConfirmIdNumber("")
+      toast.success("تم التحقق من هوية المستلم — جاهز للدفع")
     } catch (error: any) {
-      toast.error(error.message || "تعذر إرسال رمز التحقق")
+      toast.error(error.message || "تعذر التحقق من رقم الهوية")
     } finally {
-      setIsSendingOtp(false)
+      setIsConfirming(false)
     }
   }
 
@@ -1543,6 +1660,7 @@ export function RemittanceSearchPay() {
           searchToken: searchResult.searchToken,
           inputRemittanceId: searchResult.reference,
           identityAuthorizationToken: auth.token,
+          identityId: auth.identityId,
         },
         auth.idempotencyKey
       )
@@ -1553,7 +1671,6 @@ export function RemittanceSearchPay() {
         setPayResult(normalizePayResult(response.data, searchResult))
         setPaidAt(new Date())
         setShowConfirmDialog(false)
-        setShowOtpDialog(false)
         return true
       }
 
@@ -1562,7 +1679,6 @@ export function RemittanceSearchPay() {
         setPaymentMessage("عملية الدفع قيد المعالجة. لا تبدأ عملية جديدة؛ تحقق من النتيجة بعد قليل.")
         toast.warning("الدفع قيد المعالجة حالياً — لا تُعد المحاولة الآن، تحقق من الحوالة بعد قليل")
         setShowConfirmDialog(false)
-        setShowOtpDialog(false)
         return false
       }
       if (response.code === "IDEMPOTENCY_KEY_REUSED") {
@@ -1581,7 +1697,6 @@ export function RemittanceSearchPay() {
         setPaymentState("uncertain")
         setPaymentMessage("انتهت مهلة الاستجابة وقد تكون الحوالة صُرفت. سيتم التحقق تلقائياً بنفس مفتاح العملية.")
         setShowConfirmDialog(false)
-        setShowOtpDialog(false)
         scheduleRecovery = !recoveryCheck
         toast.warning("انتهت مهلة الاستجابة. لا تُعد الدفع؛ جارٍ التحقق من النتيجة بنفس مفتاح العملية.")
         return false
@@ -1610,59 +1725,35 @@ export function RemittanceSearchPay() {
     }
   }
 
-  const handleVerifyOtp = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (!searchResult || !flow?.otp || authorizationInFlightRef.current) return
-    if (identityAuth) {
-      await submitAuthorizedPayout(identityAuth, false)
-      return
-    }
-    if (!/^\d{6}$/.test(otp)) {
-      toast.error("أدخل رمز التحقق المكون من 6 أرقام")
-      return
-    }
-
-    authorizationInFlightRef.current = true
-    setIsVerifyingOtp(true)
-    try {
-      const response = await apiClient.agentRemittanceIdentityOtpVerify(
-        searchResult.searchToken,
-        otp
-      )
-      const data = response.data || (response as any)
-      if (!response.success || !data.identityAuthorizationToken) {
-        toast.error(response.message || "رمز التحقق غير صحيح أو منتهي")
-        return
-      }
-      const auth = {
-        token: String(data.identityAuthorizationToken),
-        idempotencyKey: getOrCreatePayoutKey(searchResult),
-      }
-      setIdentityAuth(auth)
-      setOtp("")
-      setIsVerifyingOtp(false)
-      await submitAuthorizedPayout(auth, false)
-    } catch (error: any) {
-      toast.error(error.message || "تعذر التحقق من الرمز")
-    } finally {
-      authorizationInFlightRef.current = false
-      setIsVerifyingOtp(false)
+  const handleCandidateSelect = (identityId: string) => {
+    if (!searchResult || isConfirming || isPaying) return
+    if (identityId === selectedIdentityId) return
+    // Display-only until the ID-number confirmation succeeds — the entered
+    // number decides the payout, so candidate cards must not reveal their
+    // stored document images beforehand.
+    setSelectedIdentityId(identityId)
+    const candidate = searchResult.candidates.find((c) => String(c.identityId) === identityId)
+    const doc = candidate?.documents?.[0]
+    if (doc) {
+      applyIdentityPreview(doc)
     }
   }
 
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!searchResult) return
-    if (flow?.otp) {
-      if (!identityAuth) {
-        toast.error("يجب التحقق من هوية المستلم عبر رمز OTP أولاً")
-        return
-      }
-      await submitAuthorizedPayout(identityAuth, false)
+    if (!searchResult || !flow) return
+    if (flow.blocked) {
+      toast.error(identityBlockedMessage())
       return
     }
-    if (!flow?.upload) {
-      toast.error(identityBlockedMessage(searchResult.identityStatus))
+    // Identity already on file: the authorization token was bound to the identity
+    // at search time (or re-bound when the agent picked another candidate).
+    if (!flow.upload) {
+      if (!identityAuth) {
+        toast.error("لا يوجد ترخيص دفع مرتبط بالهوية — يرجى البحث من جديد")
+        return
+      }
+      setShowConfirmDialog(true)
       return
     }
     if (!idNumber.trim()) {
@@ -1704,9 +1795,11 @@ export function RemittanceSearchPay() {
     setIsPaying(true)
 
     try {
+      // Existing/ambiguous: the token was minted by the ID-number confirmation
+      // and is already bound to the confirmed identity.
+      let auth = identityAuth
       // 1) Identity upload → short-lived payout authorization token.
       //    Skipped entirely when retrying a payout that already uploaded.
-      let auth = identityAuth
       if (!auth && flow?.upload) {
         const uploadRes = await apiClient.agentRemittanceIdentityUpload({
           searchToken: searchResult.searchToken,
@@ -1727,7 +1820,11 @@ export function RemittanceSearchPay() {
           setShowConfirmDialog(false)
           return
         }
-        auth = { token: String(uploadToken), idempotencyKey: getOrCreatePayoutKey(searchResult) }
+        auth = {
+          token: String(uploadToken),
+          identityId: String(uploadPayload.identityId || ""),
+          idempotencyKey: getOrCreatePayoutKey(searchResult),
+        }
         setIdentityAuth(auth)
       }
       if (!auth) {
@@ -1768,10 +1865,8 @@ export function RemittanceSearchPay() {
     setIdentityAuth(null)
     setPaymentState("idle")
     setPaymentMessage("")
-    setShowOtpDialog(false)
-    setOtp("")
-    setOtpDestination("")
-    setOtpResendSeconds(0)
+    setSelectedIdentityId("")
+    setConfirmIdNumber("")
   }
 
   // Step 3: Pay success — printable receipt slip
@@ -1847,9 +1942,15 @@ export function RemittanceSearchPay() {
           identityComplete={identityComplete}
           isPaying={isPaying}
           paymentBlocked={paymentUnresolved}
-          isSendingOtp={isSendingOtp}
-          otpResendSeconds={otpResendSeconds}
+          isConfirming={isConfirming}
+          confirmIdNumber={confirmIdNumber}
           networks={networks}
+          selectedIdentityId={selectedIdentityId}
+          selectedStatus={selectedStatus}
+          identityDetails={identityDetails}
+          onCandidateSelect={handleCandidateSelect}
+          onConfirmIdNumberChange={setConfirmIdNumber}
+          onConfirmIdentity={handleConfirmIdentity}
           onIdNumberChange={setIdNumber}
           onIdTypeChange={(v) => setIdType(v)}
           onIssueDateChange={setIssueDate}
@@ -1858,26 +1959,7 @@ export function RemittanceSearchPay() {
           imageFiles={identityImages.files}
           onImageChange={identityImages.set}
           onPaySubmit={handlePaySubmit}
-          onSendOtp={handleSendOtp}
           onReset={handleReset}
-        />
-
-        <IdentityOtpDialog
-          open={showOtpDialog}
-          onOpenChange={(open) => {
-            if (!open && isPaying) return
-            setShowOtpDialog(open)
-          }}
-          destinationMasked={otpDestination}
-          otp={otp}
-          resendSeconds={otpResendSeconds}
-          isSending={isSendingOtp}
-          isVerifying={isVerifyingOtp}
-          isPaying={isPaying}
-          paymentAuthorized={!!identityAuth}
-          onOtpChange={setOtp}
-          onResend={handleSendOtp}
-          onVerify={handleVerifyOtp}
         />
 
         <PayConfirmDialog

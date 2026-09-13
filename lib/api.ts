@@ -428,27 +428,22 @@ class ApiClient {
     })
   }
 
-  async agentRemittanceIdentityOtpSend(searchToken: string, candidateToken: string) {
+  // Identity confirmation — POST /agent/remittance/identity/confirm
+  // The agent reads the receiver's full ID number off their physical card; the
+  // backend compares it against the on-file document(s) and — on a match —
+  // binds the payout to that identity and returns a single-use token.
+  async agentRemittanceIdentityConfirm(searchToken: string, idNumber: string) {
     return this.request<{
-      destinationMasked: string
-      expiresInSeconds: number
-      resendAfterSeconds: number
-      deliveryUncertain?: boolean
-    }>('/agent/remittance/identity/otp/send', {
-      method: 'POST',
-      body: JSON.stringify({ searchToken, candidateToken }),
-      redirectOnUnauthorized: false,
-    })
-  }
-
-  async agentRemittanceIdentityOtpVerify(searchToken: string, otp: string) {
-    return this.request<{ identityAuthorizationToken: string; nextAction: 'pay' }>(
-      '/agent/remittance/identity/otp/verify',
+      identityAuthorizationToken: string
+      identityId: string
+      nextAction: 'pay'
+    }>(
+      '/agent/remittance/identity/confirm',
       {
         method: 'POST',
-        body: JSON.stringify({ searchToken, otp }),
+        body: JSON.stringify({ searchToken, idNumber }),
         redirectOnUnauthorized: false,
-      }
+      },
     )
   }
 
@@ -461,6 +456,7 @@ class ApiClient {
       searchToken: string
       inputRemittanceId: string
       identityAuthorizationToken: string
+      identityId: string
     },
     idempotencyKey: string
   ) {

@@ -210,9 +210,8 @@ export const API_POLICY: RoutePolicy[] = [
   { pattern: ['agent', 'bulk-remittance'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'remittance', 'search'], methods: ['POST'], auth: 'agent', body: 'json' },
   { pattern: ['agent', 'remittance', 'identity', 'upload'], methods: ['POST'], auth: 'agent', body: 'multipart', sensitive: true },
-  { pattern: ['agent', 'remittance', 'identity', 'otp', 'send'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
-  { pattern: ['agent', 'remittance', 'identity', 'otp', 'verify'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
-  { pattern: ['agent', 'remittance', 'identity', 'document-image'], methods: ['GET'], auth: 'agent', query: ['searchToken', 'slot', 'variant'] },
+  { pattern: ['agent', 'remittance', 'identity', 'confirm'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
+  { pattern: ['agent', 'remittance', 'identity', 'document-image'], methods: ['GET'], auth: 'agent', query: ['searchToken', 'slot', 'variant', 'v'] },
   { pattern: ['agent', 'transactions'], methods: ['GET'], auth: 'agent', query: ['page', 'limit', 'sort', 'currencyId', 'from', 'to', 'operation'] },
   { pattern: ['agent', 'dist-wallets'], methods: ['GET'], auth: 'agent' },
   { pattern: ['wallets', ':id'], methods: ['GET', 'PATCH'], auth: 'agent', query: ['depth'], body: 'json', sensitive: true },
@@ -258,6 +257,8 @@ const NUMERIC_RANGES: Record<string, [number, number]> = {
   page: [1, 1_000_000],
   limit: [1, 200],
   depth: [0, 5],
+  // Cache-buster timestamp for the document-image proxy (Date.now()).
+  v: [0, 9_000_000_000_000],
 }
 
 export function validateQuery(

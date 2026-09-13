@@ -49,6 +49,8 @@ interface BulkRemittanceResponse {
     }>
 }
 
+const isValidMobile = (mob: string): boolean => /^7[01378]\d{7}$/.test(mob.trim())
+
 export function BulkRemittanceForm() {
     const [file, setFile] = useState<File | null>(null)
     const [data, setData] = useState<RemittanceRow[]>([])
@@ -193,6 +195,11 @@ export function BulkRemittanceForm() {
             return
         }
 
+        if (!isValidMobile(sharedData.senderMobile)) {
+            setError("جوال المرسل يجب أن يكون 9 أرقام ويبدأ بالرقم 7")
+            return
+        }
+
         setProcessing(true)
         setError("")
         setSuccess("")
@@ -204,6 +211,13 @@ export function BulkRemittanceForm() {
                 receiverName: row.receiverName,
                 receiverMobile: row.receiverMobile
             }))
+
+            const invalidMobileRows = remittances.filter(r => !isValidMobile(r.receiverMobile))
+            if (invalidMobileRows.length > 0) {
+                setProcessing(false)
+                setError(`${invalidMobileRows.length} صف يحتوي على جوال مستلم غير صالح (يجب أن يكون 9 أرقام ويبدأ بالرقم 7): ${invalidMobileRows.map(r => r.receiverMobile).join(", ")}`)
+                return
+            }
 
             const response = await apiClient.agentBulkRemittance({
                 senderName: sharedData.senderName,
@@ -286,11 +300,14 @@ export function BulkRemittanceForm() {
                             <Input
                                 id="senderMobile"
                                 type="tel"
+                                inputMode="numeric"
                                 dir="ltr"
                                 className="text-right"
                                 placeholder="7xxxxxxxx"
+                                maxLength={9}
+                                pattern="7[01378][0-9]{7}"
                                 value={sharedData.senderMobile}
-                                onChange={(e) => handleSharedDataChange('senderMobile', e.target.value)}
+                                onChange={(e) => handleSharedDataChange('senderMobile', e.target.value.replace(/\D/g, '').slice(0, 9))}
                                 required
                                 disabled={processing}
                             />

@@ -154,12 +154,7 @@ export function RemittanceForm() {
 
   const sendUnresolved = ["submitting", "checking", "uncertain", "in_progress"].includes(sendState)
 
-  const normalizeMobile = (mob: string) => {
-    if (!mob) return mob
-    const clean = mob.replace(/^\+?966/, "").replace(/^0/, "")
-    if (/^7\d{8}$/.test(clean)) return clean
-    return mob
-  }
+  const isValidMobile = (mob: string): boolean => /^7[12378]\d{7}$/.test(mob.trim())
 
   useEffect(() => {
     try {
@@ -284,6 +279,18 @@ export function RemittanceForm() {
       const amountNum = parseFloat(formData.amount)
       if (isNaN(amountNum) || amountNum <= 0) {
         toast.error("الرجاء إدخال مبلغ صحيح")
+        setIsLoading(false)
+        return
+      }
+
+      if (!isValidMobile(formData.senderMobile)) {
+        toast.error("جوال المرسل يجب أن يكون 9 أرقام ويبدأ بالرقم 7")
+        setIsLoading(false)
+        return
+      }
+
+      if (!isValidMobile(formData.receiverMobile)) {
+        toast.error("جوال المستلم يجب أن يكون 9 أرقام ويبدأ بالرقم 7")
         setIsLoading(false)
         return
       }
@@ -731,10 +738,13 @@ export function RemittanceForm() {
                         <Input
                           id="senderMobile"
                           type="tel"
+                          inputMode="numeric"
                           dir="ltr"
                           placeholder="7xxxxxxxx"
+                          maxLength={9}
+                          pattern="7[01378][0-9]{7}"
                           value={formData.senderMobile}
-                          onChange={(e) => handleChange('senderMobile', e.target.value)}
+                          onChange={(e) => handleChange('senderMobile', e.target.value.replace(/\D/g, '').slice(0, 9))}
                           required
                           className="pr-10"
                         />
@@ -771,10 +781,13 @@ export function RemittanceForm() {
                         <Input
                           id="receiverMobile"
                           type="tel"
+                          inputMode="numeric"
                           dir="ltr"
                           placeholder="7xxxxxxxx"
+                          maxLength={9}
+                          pattern="7[01378][0-9]{7}"
                           value={formData.receiverMobile}
-                          onChange={(e) => handleChange('receiverMobile', e.target.value)}
+                          onChange={(e) => handleChange('receiverMobile', e.target.value.replace(/\D/g, '').slice(0, 9))}
                           required
                           className="pr-10"
                         />
