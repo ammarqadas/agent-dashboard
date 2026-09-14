@@ -35,6 +35,8 @@ export function WalletIdentity({
   const document = linkedIdentityDocument(identity)
   const fullName = identity?.fullName || wallet?.name || ""
   const verified = identity?.status === "verified"
+  const isActive = wallet?.active !== false
+  const locked = verified || isActive
   const [idNumber, setIdNumber] = useState<string>(document?.number || "")
   const [type, setType] = useState<"national" | "passport">(
     document?.attachmentType === "passport" ? "passport" : "national"
@@ -81,7 +83,7 @@ export function WalletIdentity({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (verified) return
+    if (locked) return
     setError("")
     setSuccess("")
     if (expdate && !isValidDateInput(expdate)) {
@@ -125,12 +127,14 @@ export function WalletIdentity({
     }
   }
 
-  const title = verified ? "بيانات الهوية" : identityRef ? "تحديث الهوية" : "ربط أو تسجيل الهوية"
+  const title = locked ? "بيانات الهوية" : identityRef ? "تحديث الهوية" : "ربط أو تسجيل الهوية"
   const description = verified
     ? "الهوية موثقة ولا يمكن تعديلها"
-    : identityRef
-      ? "الصور اختيارية، وعند تحديثها يجب رفع الوجهين الأمامي والخلفي معاً"
-      : "اربط هوية مطابقة موجودة أولاً، أو ارفع الوجهين لتسجيل هوية جديدة"
+    : isActive
+      ? "المحفظة مفعّلة — لا يمكن تعديل هويتها من قبل الوكيل"
+      : identityRef
+        ? "الصور اختيارية، وعند تحديثها يجب رفع الوجهين الأمامي والخلفي معاً"
+        : "اربط هوية مطابقة موجودة أولاً، أو ارفع الوجهين لتسجيل هوية جديدة"
 
   return (
     <Card>
@@ -146,7 +150,7 @@ export function WalletIdentity({
         </div>
       </CardHeader>
       <CardContent>
-        {!identityRef && (
+        {!locked && !identityRef && (
           <div className="mb-5 rounded-lg border bg-muted/30 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -160,7 +164,7 @@ export function WalletIdentity({
             </div>
           </div>
         )}
-        {!verified && <form onSubmit={handleSave} className="space-y-5">
+        {!locked && <form onSubmit={handleSave} className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="fullName" className="text-right block">الاسم الكامل</Label>
@@ -219,12 +223,12 @@ export function WalletIdentity({
           {success && <p className="text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg border border-emerald-200">{success}</p>}
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={isSaving || verified} className="min-w-40">
+            <Button type="submit" disabled={isSaving || locked} className="min-w-40">
               {isSaving ? "جاري الحفظ..." : "حفظ الهوية"}
             </Button>
           </div>
         </form>}
-        {verified && (
+        {locked && (
           <div className="grid gap-4 md:grid-cols-2 text-right">
             <div className="space-y-2">
               <Label className="text-right block">الاسم الكامل</Label>
@@ -253,7 +257,7 @@ export function WalletIdentity({
             </div>
           </div>
         )}
-        {verified && (
+        {locked && (
           <IdentityImagesSection
             slots={["front", "back", "selfie"]}
             files={identityImages.files}

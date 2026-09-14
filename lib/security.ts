@@ -139,8 +139,10 @@ const normalizeOrigin = (origin: string): string =>
 // APP_ORIGIN is required in production (fail closed); in development the
 // request origin is accepted when APP_ORIGIN is not configured.
 export function getAllowedOrigins(req: NextRequest): string[] | null {
-  const configured = process.env.APP_ORIGIN?.trim().replace(/\/+$/, '').toLowerCase()
-  if (configured) return [configured]
+  const configured = process.env.APP_ORIGIN?.split(',')
+    .map((s: string) => s.trim().replace(/\/+$/, '').toLowerCase())
+    .filter(Boolean)
+  if (configured?.length) return configured
   if (IS_PROD) return null
   const url = new URL(req.url)
   return [`${url.protocol}//${url.host}`.toLowerCase()]
