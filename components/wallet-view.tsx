@@ -3,23 +3,20 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { apiClient } from "@/lib/api"
 import { LinkedIdentityView } from "@/components/identity"
 import type { LinkedIdentity } from "@/components/identity"
 import { useRouter } from "next/navigation"
 
 interface WalletViewProps {
   wallet: any
-  onActivated?: () => void
   showDetails?: boolean
   showIdentity?: boolean
   identity?: LinkedIdentity | null
   isIdentityLoading?: boolean
 }
 
-export function WalletView({ wallet, onActivated, showDetails = true, showIdentity = true, identity, isIdentityLoading }: WalletViewProps) {
+export function WalletView({ wallet, showDetails = true, showIdentity = true, identity, isIdentityLoading }: WalletViewProps) {
   const router = useRouter()
-  const [isUpdating, setIsUpdating] = useState(false)
   const [walletData, setWalletData] = useState(wallet)
 
   // Stay in sync when the parent reloads the wallet (e.g. after identity save).
@@ -33,21 +30,6 @@ export function WalletView({ wallet, onActivated, showDetails = true, showIdenti
   const imageBase = identityRef
     ? `/api/proxy/agent/identities/${encodeURIComponent(String(identityRef))}/document-image`
     : undefined
-
-  const handleActivate = async () => {
-    setIsUpdating(true)
-    try {
-      const response = await apiClient.updateWallet(walletId, { active: true })
-      if (response.success) {
-        setWalletData((prev: any) => ({ ...prev, active: true }))
-        onActivated?.()
-      }
-    } catch (err) {
-      console.error("Failed to activate wallet:", err)
-    } finally {
-      setIsUpdating(false)
-    }
-  }
 
   return (
     <Card>
@@ -82,11 +64,6 @@ export function WalletView({ wallet, onActivated, showDetails = true, showIdenti
         {showIdentity && identityRef && <LinkedIdentityView identity={identity} imageBase={imageBase} loading={isIdentityLoading} />}
 
         <div className="flex flex-wrap gap-2 pt-2">
-          {!isActive && (
-            <Button onClick={handleActivate} disabled={isUpdating} variant="default">
-              {isUpdating ? "جاري التفعيل..." : "تفعيل المحفظة"}
-            </Button>
-          )}
           {showDetails && (
             <Button
               variant="outline"

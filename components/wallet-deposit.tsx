@@ -22,7 +22,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { CheckCircle2, Wallet, Smartphone, Coins, Loader2, Banknote, Send, FileText, Printer, RotateCcw, Receipt } from "lucide-react"
+import { CheckCircle2, Wallet, Smartphone, Coins, Loader2, Banknote, Send, FileText, Printer, RotateCcw, Receipt, Phone } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
 import { SharePdfButton } from "@/components/receipt/share-pdf-button"
@@ -247,7 +248,7 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
   const validateMobile = (mob: string) => {
     if (!propMobile && !mob) return "رقم الجوال مطلوب"
     const norm = normalizeMobile(mob)
-    if (!/^7\d{8}$/.test(norm)) return "رقم الجوال غير صحيح. يجب أن يبدأ بـ 7 ويتكون من 9 أرقام"
+    if (!/^7[12378]\d{7}$/.test(norm)) return "أدخل رقم جوال صحيح: 9 أرقام تبدأ بـ 7 (مثال: 777123456)"
     return null
   }
 
@@ -411,18 +412,30 @@ export function WalletDeposit({ mobile: propMobile, onSuccess }: WalletDepositPr
               {!propMobile && (
                 <div className="space-y-1.5">
                   <Label htmlFor="mobile" className="text-sm font-medium">رقم الجوال</Label>
-                  <Input
-                    id="mobile"
-                    type="tel"
-                    placeholder="7xxxxxxxx"
-                    value={mobile}
-                    onChange={(e) => {
-                      setMobile(e.target.value)
-                      if (mobileError) setMobileError("")
-                    }}
-                    required
-                    dir="ltr"
-                  />
+                  <div className="input-icon-wrapper">
+                    <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                    <Input
+                      id="mobile"
+                      type="tel"
+                      value={mobile}
+                      onChange={(e) => {
+                        setMobile(e.target.value.replace(/\D/g, "").slice(0, 9))
+                        if (mobileError) setMobileError("")
+                      }}
+                      onBlur={() => {
+                        if (!mobile) return
+                        const err = validateMobile(mobile)
+                        setMobileError(err || "")
+                      }}
+                      required
+                      dir="ltr"
+                      inputMode="numeric"
+                      placeholder="7xxxxxxxx"
+                      maxLength={9}
+                      pattern="7[12378][0-9]{7}"
+                      className={cn(mobileError ? "border-destructive pr-10" : "pr-10")}
+                    />
+                  </div>
                   {mobileError && <p className="text-xs text-destructive">{mobileError}</p>}
                 </div>
               )}

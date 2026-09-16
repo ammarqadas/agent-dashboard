@@ -49,6 +49,7 @@ export function WalletIdentity({
 
   const [isSaving, setIsSaving] = useState(false)
   const [isLinking, setIsLinking] = useState(false)
+  const [activating, setActivating] = useState(false)
   const [error, setError] = useState<string>("")
   const [success, setSuccess] = useState<string>("")
 
@@ -86,44 +87,86 @@ export function WalletIdentity({
     if (locked) return
     setError("")
     setSuccess("")
-    if (expdate && !isValidDateInput(expdate)) {
-      setError("تاريخ الانتهاء غير مكتمل — أدخل التاريخ بصيغة DD-MM-YYYY")
-      return
-    }
-    const hasNewImage = Object.values(identityImages.files).some(Boolean)
-    if (!identityRef && (!identityImages.files.front || !identityImages.files.back)) {
-      setError("اربط الهوية الموجودة أولاً، أو ارفع صورتي الوجه والخلف لتسجيل هوية جديدة.")
-      return
-    }
-    if (hasNewImage && (!identityImages.files.front || !identityImages.files.back)) {
-      setError("يجب رفع الصورتين الأمامية والخلفية معاً عند تحديث صور الهوية.")
+    const validationError = validateForm()
+    if (validationError) {
+      setError(validationError)
       return
     }
     setIsSaving(true)
     try {
-      const res = await apiClient.agentUpsertWalletIdentity({
-        walletId,
-        idNumber: idNumber || undefined,
-        type,
-        expdate: expdate ? dateInputToISO(expdate) : undefined,
-        idImageFront: identityImages.files.front,
-        idImageBack: identityImages.files.back,
-        idImageSelfi: identityImages.files.selfie,
-      })
-
-      if (!res.success) {
-        setError(res.message || "Failed to save identity")
-        return
-      }
-
-      identityImages.reset()
+      const ok = await performSave()
+      if (!ok) return
       setSuccess("تم حفظ الهوية بنجاح.")
       toast.success("تم حفظ الهوية بنجاح.")
       onUpdated?.()
-    } catch (err) {
+    } catch {
       setError("فشل في حفظ الهوية. يرجى المحاولة مرة أخرى.")
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const validateForm = (): string | "" => {
+    if (expdate && !isValidDateInput(expdate)) {
+      return "تاريخ الانتهاء غير مكتمل — أدخل التاريخ بصيغة DD-MM-YYYY"
+    }
+    const hasNewImage = Object.values(identityImages.files).some(Boolean)
+    if (!identityRef && (!identityImages.files.front || !identityImages.files.back)) {
+      return "اربط الهوية الموجودة أولاً، أو ارفع صورتي الوجه والخلف لتسجيل هوية جديدة."
+    }
+    if (hasNewImage && (!identityImages.files.front || !identityImages.files.back)) {
+      return "يجب رفع الصورتين الأمامية والخلفية معاً عند تحديث صور الهوية."
+    }
+    return ""
+  }
+
+  const performSave = async (): Promise<boolean> => {
+    const res = await apiClient.agentUpsertWalletIdentity({
+      walletId,
+      idNumber: idNumber || undefined,
+      type,
+      expdate: expdate ? dateInputToISO(expdate) : undefined,
+      idImageFront: identityImages.files.front,
+      idImageBack: identityImages.files.back,
+      idImageSelfi: identityImages.files.selfie,
+    })
+    if (!res.success) {
+      setError(res.message || "Failed to save identity")
+      return false
+    }
+    identityImages.reset()
+    return true
+  }
+
+  // Activation is part of the identity action, never a separate standalone step:
+  // for an inactive wallet the agent saves the identity and activates in one go.
+  const handleActivate = async () => {
+    setError("")
+    setSuccess("")
+    const validationError = validateForm()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    setActivating(true)
+    try {
+      const hasNewData = Boolean(identityImages.files.front || identityImages.files.back || identityImages.files.selfie)
+      if (!identityRef || hasNewData) {
+        const ok = await performSave()
+        if (!ok) return
+      }
+      const res = await apiClient.updateWallet(walletId, { active: true })
+      if (!res.success) {
+        setError(res.message || "تم حفظ الهوية، لكن تعذر تفعيل المحفظة — حاول التفعيل مجدداً.")
+        return
+      }
+      setSuccess("تم حفظ الهوية وتفعيل المحفظة.")
+      toast.success("تم تفعيل المحفظة.")
+      onUpdated?.()
+    } catch {
+      setError("تعذر تفعيل المحفظة. يرجى المحاولة مرة أخرى.")
+    } finally {
+      setActivating(false)
     }
   }
 
@@ -133,8 +176,8 @@ export function WalletIdentity({
     : isActive
       ? "المحفظة مفعّلة — لا يمكن تعديل هويتها من قبل الوكيل"
       : identityRef
-        ? "الصور اختيارية، وعند تحديثها يجب رفع الوجهين الأمامي والخلفي معاً"
-        : "اربط هوية مطابقة موجودة أولاً، أو ارفع الوجهين لتسجيل هوية جديدة"
+        ? "الصور اختيارية، وعند تحديثها يجب رفع الوجهين الأمامي والخلفي معاً — التفعيل يتم بالحفظ"
+        : "اربط هوية مطابقة موجودة، أو ارفع الوجهين لتسجيل هوية جديدة — ثم فعّل المحفظة من زر حفظ وتفعيل"
 
   return (
     <Card>
@@ -222,8 +265,18 @@ export function WalletIdentity({
           {error && <p className="text-sm text-destructive bg-destructive/5 p-3 rounded-lg border border-destructive/20">{error}</p>}
           {success && <p className="text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg border border-emerald-200">{success}</p>}
 
-          <div className="flex justify-end">
-            <Button type="submit" disabled={isSaving || locked} className="min-w-40">
+          <div className="flex justify-end gap-2">
+            {!isActive && (
+              <Button
+                type="button"
+                onClick={handleActivate}
+                disabled={isSaving || locked}
+                className="min-w-40"
+              >
+                {activating ? "جاري التفعيل..." : "حفظ وتفعيل"}
+              </Button>
+            )}
+            <Button type="submit" disabled={isSaving || locked || activating} className="min-w-40">
               {isSaving ? "جاري الحفظ..." : "حفظ الهوية"}
             </Button>
           </div>

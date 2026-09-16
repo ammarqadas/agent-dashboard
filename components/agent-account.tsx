@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { apiClient } from "@/lib/api"
 import { User, Mail, Shield, Hash, Wallet, RefreshCw, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ChangePasswordForm } from "@/components/account/change-password-form"
 
 export function AgentAccount() {
   const [agentInfo, setAgentInfo] = useState<any>(null)
@@ -258,6 +259,9 @@ export function AgentAccount() {
           )}
         </CardContent>
       </Card>
+
+      {/* Change Password */}
+      <ChangePasswordForm />
 
       {/* Refresh Button */}
       <div className="flex justify-center">

@@ -73,11 +73,26 @@ export function useCashoutCodePay() {
     try {
       const response = await apiClient.payCashoutCodeGeneric(code)
       if (response.success) {
-        return { success: true, message: "تم دفع كود السحب بنجاح" }
+        const payload: any = response.result || response.cashoutCode || response.data || response
+        const wallet = payload?.wallet || {}
+        const paidAt = payload?.paidAt || payload?.paid_at || payload?.paidTime
+        return {
+          success: true,
+          message: "تم دفع كود السحب بنجاح",
+          receipt: {
+            code: payload?.code || code,
+            amount: Number(payload?.amount ?? 0),
+            currency: payload?.currency ?? payload?.currencyCode ?? null,
+            walletName: typeof wallet === "object" ? (wallet.name || null) : null,
+            mobile: (typeof wallet === "object" ? (wallet.mobile || null) : null) || payload?.mobile || null,
+            transactionId: payload?.transactionId || payload?.txId || payload?.id || null,
+            paidAt: paidAt ? new Date(paidAt) : new Date(),
+          },
+        }
       }
-      return { success: false, message: response.message || "فشل في دفع كود السحب" }
+      return { success: false as const, message: response.message || "فشل في دفع كود السحب", receipt: null }
     } catch {
-      return { success: false, message: "حدث خطأ أثناء دفع الكود" }
+      return { success: false as const, message: "حدث خطأ أثناء دفع الكود", receipt: null }
     } finally {
       setIsPaying(false)
     }

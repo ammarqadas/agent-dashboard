@@ -87,7 +87,7 @@ export default function WalletDetailPage() {
       </div>
 
       {/* Wallet summary + activation */}
-      <WalletView wallet={wallet} identity={identity} isIdentityLoading={isIdentityLoading} onActivated={loadWallet} showDetails={false} showIdentity={false} />
+      <WalletView wallet={wallet} identity={identity} isIdentityLoading={isIdentityLoading} showDetails={false} showIdentity={false} />
 
       {/* Identity update */}
       <WalletIdentity wallet={wallet} identity={identity} onUpdated={loadWallet} />

@@ -219,6 +219,14 @@ class ApiClient {
     return response
   }
 
+  // Change the logged-in agent's password
+  async changePassword(data: { currentPassword: string; newPassword: string }) {
+    return this.request('/agent/change-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
   // Create wallet (agent)
   async createWallet(data: { name: string; mobile: string; password?: string; address?: string }) {
     return this.request('/agent/create-wallet', {

@@ -154,6 +154,10 @@ export function RemittanceForm() {
 
   const sendUnresolved = ["submitting", "checking", "uncertain", "in_progress"].includes(sendState)
 
+  const [senderMobileError, setSenderMobileError] = useState("")
+  const [receiverMobileError, setReceiverMobileError] = useState("")
+  const MOBILE_ERR = "أدخل رقم جوال صحيح: 9 أرقام تبدأ بـ 7 (مثال: 777123456)"
+
   const isValidMobile = (mob: string): boolean => /^7[12378]\d{7}$/.test(mob.trim())
 
   useEffect(() => {
@@ -553,9 +557,7 @@ export function RemittanceForm() {
         </Alert>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left: Main Form / Success Result */}
-        <div className="lg:col-span-2">
+      <div className="space-y-4">
           {success ? (
             <div className="space-y-4">
               {/* Toolbar — hidden when printing */}
@@ -710,11 +712,11 @@ export function RemittanceForm() {
 
             <CardContent className="space-y-5">
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Sender Details */}
+                {/* Parties Details */}
                 <div className="form-section space-y-4">
                   <Label className="form-section-title">
                     <User className="h-4 w-4" />
-                    بيانات المرسل
+                    بيانات الأطراف
                   </Label>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="form-field">
@@ -742,24 +744,22 @@ export function RemittanceForm() {
                           dir="ltr"
                           placeholder="7xxxxxxxx"
                           maxLength={9}
-                          pattern="7[01378][0-9]{7}"
+                          pattern="7[12378][0-9]{7}"
                           value={formData.senderMobile}
-                          onChange={(e) => handleChange('senderMobile', e.target.value.replace(/\D/g, '').slice(0, 9))}
+                          onChange={(e) => {
+                            handleChange('senderMobile', e.target.value.replace(/\D/g, '').slice(0, 9))
+                            if (senderMobileError) setSenderMobileError("")
+                          }}
+                          onBlur={() => {
+                            if (!formData.senderMobile) return
+                            setSenderMobileError(isValidMobile(formData.senderMobile) ? "" : MOBILE_ERR)
+                          }}
                           required
-                          className="pr-10"
+                          className={`pr-10 ${senderMobileError ? "border-destructive" : ""}`}
                         />
                       </div>
+                      {senderMobileError && <p className="text-xs text-destructive">{senderMobileError}</p>}
                     </div>
-                  </div>
-                </div>
-
-                {/* Receiver Details */}
-                <div className="form-section space-y-4">
-                  <Label className="form-section-title">
-                    <User className="h-4 w-4" />
-                    بيانات المستلم
-                  </Label>
-                  <div className="grid md:grid-cols-2 gap-4">
                     <div className="form-field">
                       <Label htmlFor="receiverName" className="text-sm font-medium">اسم المستلم</Label>
                       <div className="input-icon-wrapper">
@@ -785,13 +785,21 @@ export function RemittanceForm() {
                           dir="ltr"
                           placeholder="7xxxxxxxx"
                           maxLength={9}
-                          pattern="7[01378][0-9]{7}"
+                          pattern="7[12378][0-9]{7}"
                           value={formData.receiverMobile}
-                          onChange={(e) => handleChange('receiverMobile', e.target.value.replace(/\D/g, '').slice(0, 9))}
+                          onChange={(e) => {
+                            handleChange('receiverMobile', e.target.value.replace(/\D/g, '').slice(0, 9))
+                            if (receiverMobileError) setReceiverMobileError("")
+                          }}
+                          onBlur={() => {
+                            if (!formData.receiverMobile) return
+                            setReceiverMobileError(isValidMobile(formData.receiverMobile) ? "" : MOBILE_ERR)
+                          }}
                           required
-                          className="pr-10"
+                          className={`pr-10 ${receiverMobileError ? "border-destructive" : ""}`}
                         />
                       </div>
+                      {receiverMobileError && <p className="text-xs text-destructive">{receiverMobileError}</p>}
                     </div>
                   </div>
                 </div>
@@ -802,7 +810,7 @@ export function RemittanceForm() {
                     <Coins className="h-4 w-4" />
                     بيانات الحوالة
                   </Label>
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="grid gap-4 md:grid-cols-3">
                     <div className="form-field">
                       <Label htmlFor="amount" className="text-sm font-medium">المبلغ</Label>
                       <div className="input-icon-wrapper">
@@ -868,7 +876,7 @@ export function RemittanceForm() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="form-field md:col-span-2">
+                    <div className="form-field md:col-span-3">
                       <Label htmlFor="notes" className="text-sm font-medium">ملاحظات (اختياري)</Label>
                       <textarea
                         id="notes"
@@ -880,6 +888,73 @@ export function RemittanceForm() {
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Summary — compact card above submit */}
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-3">
+                  <Label className="form-section-title">
+                    <ArrowRightLeft className="h-4 w-4" />
+                    ملخص الحوالة
+                  </Label>
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <div>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <User className="h-3 w-3" /> المرسل
+                      </span>
+                      <p className="text-sm font-medium mt-0.5">{formData.senderName || "—"}</p>
+                      {formData.senderMobile && (
+                        <p className="font-mono text-xs mt-0.5" dir="ltr">{formData.senderMobile}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <User className="h-3 w-3" /> المستلم
+                      </span>
+                      <p className="text-sm font-medium mt-0.5">{formData.receiverName || "—"}</p>
+                      {formData.receiverMobile && (
+                        <p className="font-mono text-xs mt-0.5" dir="ltr">{formData.receiverMobile}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Coins className="h-3 w-3" /> المبلغ
+                      </span>
+                      <p className="text-base font-bold font-mono mt-0.5" dir="ltr">
+                        {formData.amount
+                          ? `${parseFloat(formData.amount).toLocaleString("en-US")} ${selectedCurrency?.code || ''}`
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {formData.distWallet && (
+                    <div className="flex items-center justify-between text-sm border-t border-border/40 pt-2">
+                      <span className="text-xs text-muted-foreground">تحويل عبر</span>
+                      <p className="text-sm font-medium">{selectedNetwork?.name || formData.distWallet}</p>
+                    </div>
+                  )}
+
+                  {commissionResult && (
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-50/50 p-3 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">عمولة التحويل</span>
+                        <span className="font-mono font-semibold">{commissionResult.totalCommission}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-emerald-500/20 pt-2 text-sm">
+                        <span className="font-semibold">المبلغ الإجمالي</span>
+                        <span className="font-mono font-bold">{commissionResult.totalAmount} {selectedCurrency?.code}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {isFetchingCommission && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>جاري احتساب العمولة...</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Submit Button */}
@@ -900,170 +975,11 @@ export function RemittanceForm() {
                     </div>
                   )}
                 </Button>
-
-                {/* Compact Success Card */}
-                {success && !successDismissed && (
-                  <div className="relative rounded-xl border border-emerald-500/40 bg-emerald-50 p-5 space-y-3">
-                    <button
-                      type="button"
-                      onClick={() => setSuccessDismissed(true)}
-                      className="absolute top-3 left-3 text-emerald-500 hover:text-emerald-700 transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                    <div className="flex items-center gap-2 text-emerald-700 font-semibold">
-                      <CheckCircle2 className="h-5 w-5" />
-                      <span>تم إرسال الحوالة بنجاح</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      {success.transactionId && (
-                        <div className="space-y-0.5">
-                          <span className="text-xs text-muted-foreground">رقم العملية</span>
-                          <p className="font-mono font-bold">{success.transactionId}</p>
-                        </div>
-                      )}
-                      {success.expressid && (
-                        <div className="space-y-0.5">
-                          <span className="text-xs text-muted-foreground">رقم الحوالة</span>
-                          <p className="font-mono font-bold">{success.expressid}</p>
-                        </div>
-                      )}
-                      <div className="space-y-0.5">
-                        <span className="text-xs text-muted-foreground">المبلغ</span>
-                        <p className="font-mono font-bold">{success.amount?.toLocaleString()} {success.currency}</p>
-                      </div>
-                      <div className="space-y-0.5">
-                        <span className="text-xs text-muted-foreground">الحالة</span>
-                        <p className="font-medium text-emerald-600">مكتملة</p>
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      onClick={handleReset}
-                      variant="outline"
-                      className="w-full h-11 font-semibold"
-                    >
-                      <RotateCcw className="ml-2 h-4 w-4" />
-                      إرسال حوالة جديدة
-                    </Button>
-                  </div>
-                )}
               </form>
             </CardContent>
           </Card>
           )}
         </div>
-
-        {/* Right: Preview Sidebar */}
-        <div className="lg:col-span-1 print:hidden">
-          <Card className="rounded-xl border border-border/60 lg:sticky lg:top-24">
-            <CardHeader className="pb-5 border-b border-border/40">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <ArrowRightLeft className="h-4 w-4" />
-                {success ? "تمت العملية" : "ملخص الحوالة"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {success ? (
-                <div className="space-y-4">
-                  <div className="text-center py-2">
-                    <div className="icon-container bg-emerald-500/10 text-emerald-600 mx-auto mb-2">
-                      <CheckCircle2 className="h-5 w-5" />
-                    </div>
-                    <p className="text-sm font-bold text-emerald-600">تمت العملية بنجاح</p>
-                  </div>
-                  <div className="space-y-3">
-                    {success.transactionId && (
-                      <div>
-                        <span className="text-xs text-muted-foreground">رقم العملية</span>
-                        <p className="font-mono text-sm font-bold">{success.transactionId}</p>
-                      </div>
-                    )}
-                    {success.expressid && (
-                      <div>
-                        <span className="text-xs text-muted-foreground">رقم الحوالة</span>
-                        <p className="font-mono text-sm font-bold">{success.expressid}</p>
-                      </div>
-                    )}
-                    <div>
-                      <span className="text-xs text-muted-foreground">المبلغ</span>
-                      <p className="font-mono text-lg font-bold" dir="ltr">{success.amount?.toLocaleString()} {success.currency}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Sender */}
-                  <div>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <User className="h-3 w-3" /> المرسل
-                    </span>
-                    <p className="text-sm font-medium mt-0.5">{formData.senderName || "—"}</p>
-                    {formData.senderMobile && (
-                      <p className="font-mono text-xs mt-0.5" dir="ltr">{formData.senderMobile}</p>
-                    )}
-                  </div>
-
-                  {/* Receiver */}
-                  <div>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <User className="h-3 w-3" /> المستلم
-                    </span>
-                    <p className="text-sm font-medium mt-0.5">{formData.receiverName || "—"}</p>
-                    {formData.receiverMobile && (
-                      <p className="font-mono text-xs mt-0.5" dir="ltr">{formData.receiverMobile}</p>
-                    )}
-                  </div>
-
-                  {/* Amount */}
-                  <div>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Coins className="h-3 w-3" /> المبلغ
-                    </span>
-                    <p className="text-lg font-bold font-mono mt-0.5" dir="ltr">
-                      {formData.amount
-                        ? `${parseFloat(formData.amount).toLocaleString("en-US")} ${selectedCurrency?.code || ''}`
-                        : "—"}
-                    </p>
-                  </div>
-
-                  {/* Network */}
-                  {formData.distWallet && (
-                    <div>
-                      <span className="text-xs text-muted-foreground">تحويل عبر</span>
-                      <p className="text-sm mt-0.5">{selectedNetwork?.name || formData.distWallet}</p>
-                    </div>
-                  )}
-
-                  {/* Commission (when available) */}
-                  {commissionResult && (
-                    <div className="pt-3 border-t">
-                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-50/50 p-3 space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">عمولة التحويل</span>
-                          <span className="font-mono font-semibold">{commissionResult.totalCommission}</span>
-                        </div>
-                        <div className="flex justify-between border-t border-emerald-500/20 pt-2 text-sm">
-                          <span className="font-semibold">المبلغ الإجمالي</span>
-                          <span className="font-mono font-bold">{commissionResult.totalAmount} {selectedCurrency?.code}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Commission loading */}
-                  {isFetchingCommission && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>جاري احتساب العمولة...</span>
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
 
       {/* Confirmation Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
