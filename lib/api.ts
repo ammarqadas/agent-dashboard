@@ -240,10 +240,10 @@ class ApiClient {
     return this.request(`/agent/wallet-search?mobile=${encodeURIComponent(mobile)}`)
   }
 
-  // Get wallet details
+  // Wallet details — restricted custom endpoint (scrubbed, no credential fields)
   async getWallet(id: string | number, depth: number = 2) {
     const d = Math.min(5, Math.max(0, Math.floor(Number(depth) || 0)))
-    return this.request(`/wallets/${encodeId(id)}?depth=${d}`)
+    return this.request(`/agent/wallets/${encodeId(id)}?depth=${d}`)
   }
 
   // Identity records are referenced by wallet.identityLink.identityRef.
@@ -257,10 +257,10 @@ class ApiClient {
     })
   }
 
-  // Activate/deactivate wallet
-  async updateWallet(id: string | number, data: { active?: boolean;[key: string]: any }) {
-    return this.request(`/wallets/${encodeId(id)}`, {
-      method: 'PATCH',
+  // Activate/deactivate wallet — restricted endpoint, body is exactly {active}
+  async updateWallet(id: string | number, data: { active: boolean }) {
+    return this.request(`/agent/wallets/${encodeId(id)}/activate`, {
+      method: 'POST',
       body: JSON.stringify(data),
     })
   }
@@ -497,10 +497,6 @@ class ApiClient {
   }
 
   // Transactions
-  async getWalletTransactions(walletId: string | number) {
-    return this.request(`/wallets/${encodeId(walletId)}/transactions`)
-  }
-
   async getTransactions(filters?: {
     page?: number
     limit?: number
@@ -523,9 +519,9 @@ class ApiClient {
     return this.request(`/agent/transactions${qs ? `?${qs}` : ''}`)
   }
 
-  // Agent account
+  // Agent account — restricted endpoint (only the agent's own accounts)
   async getAgentAccount() {
-    return this.request('/accounts?owner=agent')
+    return this.request('/agent/accounts')
   }
 
   // Get currencies
@@ -540,11 +536,6 @@ class ApiClient {
       response.docs = response.networks
     }
     return response
-  }
-
-  // Get account by ID
-  async getAccount(accountId: string | number) {
-    return this.request(`/accounts/${encodeId(accountId)}`)
   }
 
   // Agent: upsert wallet identity (multipart/form-data)
