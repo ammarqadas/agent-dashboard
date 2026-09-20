@@ -415,6 +415,8 @@ class ApiClient {
     issuePlace: string
     front: File
     back: File
+    /** Explicit candidate selection for ambiguous matches (attach-to-selected). */
+    identityId?: string | number
   }) {
     const fd = new FormData()
     fd.set('searchToken', args.searchToken)
@@ -423,6 +425,9 @@ class ApiClient {
     fd.set('issueDate', args.issueDate)
     fd.set('expiryDate', args.expiryDate)
     fd.set('issuePlace', args.issuePlace)
+    if (args.identityId != null && String(args.identityId) !== '') {
+      fd.set('identityId', String(args.identityId))
+    }
     fd.set('front', args.front)
     fd.set('back', args.back)
 

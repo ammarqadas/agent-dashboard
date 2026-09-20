@@ -35,6 +35,7 @@ import {
   Printer,
   AlertTriangle,
   FileImage,
+  FilePlus2,
   PenLine,
   ShieldCheck,
 } from "lucide-react"
@@ -93,6 +94,8 @@ type SearchResult = {
   receiverMobile?: string
   identityStatus: IdentityStatus
   identityNextAction?: IdentityNextAction
+  canCollectNew?: boolean
+  boundDocType?: "national" | "passport"
   candidates: IdentityCandidate[]
   identity?: IdentityPreview
 }
@@ -121,15 +124,20 @@ function identityBlockedMessage(): string {
 }
 
 // Single source of truth for what each identity decision requires before payout:
-// - existing:  one identity on file → the search already bound a payout token.
-// - ambiguous: several identities on file → the agent picks one, then pays.
+// - existing:  one identity on file → the search already bound a payout token;
+//              the agent may also opt into re-collecting the images (collectMode).
+// - ambiguous: several identities on file → the agent picks one, then pays; the
+//              collect-new alternate attaches to the selected candidate.
 // - new:       no identity record → collect identity + upload images.
 // - unknown:   blocked.
-function identityFlow(status: IdentityStatus): {
+function identityFlow(status: IdentityStatus, forceCollect?: boolean): {
   upload: boolean
   blocked: boolean
   select: boolean
 } {
+  if (forceCollect) {
+    return { upload: true, blocked: false, select: status === "ambiguous" }
+  }
   switch (status) {
     case "existing":
       return { upload: false, blocked: false, select: false }
@@ -407,6 +415,9 @@ function RemittanceResultStep({
   onImageChange,
   onPaySubmit,
   onReset,
+  collectMode,
+  canCollectNew,
+  onToggleCollectMode,
 }: {
   searchResult: SearchResult
   idNumber: string
@@ -445,9 +456,13 @@ function RemittanceResultStep({
   onImageChange: (slot: IdentityImageSlot, file: File | null) => void
   onPaySubmit: (e: React.FormEvent) => void
   onReset: () => void
+  /** Existing/ambiguous decisions: agent's collect-new toggle. */
+  collectMode: boolean
+  canCollectNew: boolean
+  onToggleCollectMode: () => void
 }) {
   const networkName = networks.find(n => n.key === searchResult.networkKey)?.name || searchResult.networkKey
-  const flow = identityFlow(searchResult.identityStatus)
+  const flow = identityFlow(searchResult.identityStatus, collectMode)
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -531,7 +546,8 @@ function RemittanceResultStep({
 
             {/* Identity on file: the search already bound a payout authorization
                 token — the agent reviews it (and picks a candidate when several
-                identities match) then pays. */}
+                identities match) then pays. In collectMode for existing/ambiguous
+                decisions the agent may re-collect the images instead. */}
             {!flow.upload && !flow.blocked ? (
               <form onSubmit={onPaySubmit} className="space-y-5">
                 {flow.select && (
@@ -665,6 +681,19 @@ function RemittanceResultStep({
               </div>
             ) : (
             <form onSubmit={onPaySubmit}>
+              {collectMode && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleCollectMode}
+                  disabled={isPaying || paymentBlocked}
+                  className="mb-2 text-xs"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  العودة — التحقق من هوية العميل الموجودة
+                </Button>
+              )}
               <div className="form-section space-y-3">
                 <Label className="form-section-title">
                   <CreditCard className="h-4 w-4" />
@@ -908,9 +937,36 @@ function RemittanceResultStep({
                       <span className="text-muted-foreground">جهة الإصدار</span>
                       <span className="text-xs">{issuePlace}</span>
                     </div>
-                  )}
+                    )}
+                    {(canCollectNew || searchResult.identityStatus !== "new") && !identityLocked && (
+                      (() => {
+                        const verifiedBound =
+                          (selectedStatus || searchResult.identity?.status) === "verified"
+                        return (
+                          <>
+                            {!canCollectNew && (
+                              <p className="text-[11px] leading-4 text-muted-foreground">
+                                لتمييز هوية من نوع مختلف (جواز سفر مثلاً) يمكن تسجيلها هنا — استبدال نفس نوع البطاقة الموثقة يتم عبر إدارة المراجعة.
+                              </p>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={onToggleCollectMode}
+                              disabled={isConfirming || isPaying || paymentBlocked}
+                              className="w-full h-9 text-xs"
+                            >
+                              <FilePlus2 className="h-4 w-4" />
+                              {verifiedBound
+                                ? "تسجيل هوية من نوع مختلف"
+                                : "تسجيل هوية جديدة / تحديث صور الهوية"}
+                            </Button>
+                          </>
+                        )
+                      })()
+                    )}
+                  </div>
                 </div>
-              </div>
             )}
 
             {(frontPreview || backPreview) && (
@@ -1383,6 +1439,9 @@ export function RemittanceSearchPay() {
   // Full ID number typed by the agent from the receiver's physical card.
   const [confirmIdNumber, setConfirmIdNumber] = useState("")
   const [isConfirming, setIsConfirming] = useState(false)
+  // Existing/ambiguous decisions: when the agent opts into re-collecting the
+  // receiver's images (server allows unless the bound doc is verified).
+  const [forceCollect, setForceCollect] = useState(false)
 
   useEffect(() => {
     try {
@@ -1397,7 +1456,7 @@ export function RemittanceSearchPay() {
     ? networks.find(n => n.key === searchResult.networkKey)?.name || searchResult.networkKey
     : ""
 
-  const flow = searchResult ? identityFlow(searchResult.identityStatus) : null
+  const flow = searchResult ? identityFlow(searchResult.identityStatus, forceCollect) : null
   const identityLocked = !!identityAuth
   const paymentUnresolved = ["uncertain", "checking", "in_progress"].includes(paymentState)
 
@@ -1550,10 +1609,13 @@ export function RemittanceSearchPay() {
           receiverMobile: pickString(rem.receiver, ["mobile", "phone", "msisdn"]) || pickString(rem, ["receiverMobile", "receiver_mobile"]),
           identityStatus: status,
           identityNextAction: dec.nextAction,
+          canCollectNew: Boolean(dec.canCollectNew),
+          boundDocType: dec.boundDocType,
           candidates,
           identity,
         }
         setSearchResult(result)
+        setForceCollect(false)
 
         // Existing / ambiguous: the identity is on file but the payout token is
         // NOT issued here — the agent must confirm the receiver's full ID
@@ -1810,6 +1872,11 @@ export function RemittanceSearchPay() {
           issuePlace: issuePlace.trim(),
           front: identityImages.files.front!,
           back: identityImages.files.back!,
+          // Ambiguous matches attach the replacement to the selected candidate.
+          identityId:
+            searchResult.identityStatus === "ambiguous" && selectedIdentityId
+              ? selectedIdentityId
+              : undefined,
         })
         const uploadPayload: any = uploadRes.data || uploadRes
         const uploadToken = uploadRes.success
@@ -1948,6 +2015,9 @@ export function RemittanceSearchPay() {
           selectedIdentityId={selectedIdentityId}
           selectedStatus={selectedStatus}
           identityDetails={identityDetails}
+          collectMode={forceCollect}
+          canCollectNew={Boolean(searchResult.canCollectNew)}
+          onToggleCollectMode={() => setForceCollect((mode) => !mode)}
           onCandidateSelect={handleCandidateSelect}
           onConfirmIdNumberChange={setConfirmIdNumber}
           onConfirmIdentity={handleConfirmIdentity}
