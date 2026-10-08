@@ -109,7 +109,7 @@ class ApiClient {
       // 403: permission denied — keep the session, surface the message only.
       if (response.status === 403) {
         const data = await response.json().catch(() => ({}))
-        return { success: false, message: data?.message || 'ليس لديك صلاحية للقيام بهذا الإجراء.' }
+        return { ...data, success: false, httpStatus: 403, message: data?.message || 'ليس لديك صلاحية للقيام بهذا الإجراء.' }
       }
       if (response.status === 413) {
         return { success: false, message: 'حجم البيانات المرسلة كبير جداً.' }
@@ -140,6 +140,7 @@ class ApiClient {
           ...data,
           success: false,
           message: data?.message || `HTTP error! status: ${response.status}`,
+          httpStatus: response.status,
         }
       }
 
@@ -152,7 +153,7 @@ class ApiClient {
             code: 'CLIENT_TIMEOUT',
             message: 'انتهت مهلة انتظار الخادم. قد تكون العملية ما زالت قيد التنفيذ.',
           }
-        : { success: false, message: 'تعذر الاتصال بالخادم. يرجى المحاولة مرة أخرى.' }
+        : { success: false, code: 'NETWORK_ERROR', message: 'تعذر الاتصال بالخادم. تحقق من نتيجة العملية قبل إعادة تنفيذها.' }
     } finally {
       clearTimeout(timer)
       externalSignal?.removeEventListener('abort', onExternalAbort)
@@ -376,8 +377,7 @@ class ApiClient {
   }
 
   // Send Remittance — POST /api/agent/action/execute-generic
-  // Idempotency-Key is mandatory: a timed-out send must be replayed with the
-  // same key so the upstream outcome is reconciled instead of duplicated.
+  // Keep the original key. Timeout recovery uses agentRemittanceVerify, not send.
   async agentRemittanceSend(
     networkKey: string,
     payload: {
@@ -461,8 +461,8 @@ class ApiClient {
   }
 
   // Pay Remittance — POST /agent/action/execute-generic (JSON, no images)
-  // Requires an Idempotency-Key; the same key must be reused for retries of
-  // the same payout (the authorization token is consumed on first attempt).
+  // Requires an Idempotency-Key. The authorization token is consumed on the
+  // initial attempt; recovery uses agentRemittanceVerify without that token.
   async agentRemittancePay(
     networkKey: string,
     payload: {
@@ -478,6 +478,15 @@ class ApiClient {
       headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify({ networkKey, configType: 'pay', ...payload }),
       timeoutMs: EXECUTE_TIMEOUT_MS,
+    })
+  }
+
+  // Recover by verification; never resubmit send/pay or consume identity tokens.
+  async agentRemittanceVerify(operation: 'send' | 'pay', idempotencyKey: string) {
+    return this.request<Record<string, any>>('/agent/remittance/verify', {
+      method: 'POST',
+      body: JSON.stringify({ operation, idempotencyKey }),
+      redirectOnUnauthorized: false,
     })
   }
 

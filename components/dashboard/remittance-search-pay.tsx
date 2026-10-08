@@ -41,6 +41,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
+import { savePendingRemittance, loadPendingRemittance, clearPendingRemittance, hasUncertainRemittanceOutcome, VERIFICATION_DELAY_MS, MAX_AUTO_VERIFICATIONS } from "@/lib/pending-remittance"
 import { formatReceiptTimestamp, pickString } from "@/lib/utils"
 import { DateInput, isValidDateInput, dateInputToISO, isoToDateInput } from "@/components/ui/date-input"
 import { SharePdfButton } from "@/components/receipt/share-pdf-button"
@@ -1426,6 +1427,9 @@ export function RemittanceSearchPay() {
   const payoutInFlightRef = useRef(false)
   const authorizationInFlightRef = useRef(false)
   const recoveryTimerRef = useRef<number | null>(null)
+  const recoveryKeyRef = useRef<string | null>(null)
+  const recoveryChecksRef = useRef(0)
+  const recoveryMountedRef = useRef(true)
   const [payResult, setPayResult] = useState<PayResult | null>(null)
   const [paidAt, setPaidAt] = useState<Date>(new Date())
 
@@ -1458,7 +1462,67 @@ export function RemittanceSearchPay() {
 
   const flow = searchResult ? identityFlow(searchResult.identityStatus, forceCollect) : null
   const identityLocked = !!identityAuth
-  const paymentUnresolved = ["uncertain", "checking", "in_progress"].includes(paymentState)
+  const paymentUnresolved = ["submitting", "uncertain", "checking", "in_progress"].includes(paymentState)
+
+  useEffect(() => {
+    const pending = loadPendingRemittance<SearchResult>('pay')
+    if (pending) {
+      recoveryKeyRef.current = pending.key
+      setSearchResult(pending.snapshot)
+      setPaymentState('uncertain')
+      setPaymentMessage('تم استعادة عملية صرف لم تُحسم نتيجتها. تحقق من العملية السابقة قبل أي صرف جديد.')
+    }
+  }, [])
+
+  const verifyPayout = async (automaticCheck = false) => {
+    if (!recoveryKeyRef.current || !searchResult || payoutInFlightRef.current) return
+    if (recoveryTimerRef.current !== null) window.clearTimeout(recoveryTimerRef.current)
+    recoveryTimerRef.current = null
+    if (!automaticCheck) recoveryChecksRef.current = MAX_AUTO_VERIFICATIONS
+    payoutInFlightRef.current = true
+    setIsPaying(true)
+    setPaymentState('checking')
+    setPaymentMessage('جارٍ التحقق لدى الشبكة من عملية الصرف السابقة، دون إعادة الصرف...')
+    let pollAgain = false
+    try {
+      const response = await apiClient.agentRemittanceVerify('pay', recoveryKeyRef.current)
+      if (response.success && response.status === 'completed') {
+        setPayResult(normalizePayResult(response.data, searchResult))
+        setPaidAt(response.data?.completedAt ? new Date(response.data.completedAt) : new Date())
+        clearPendingRemittance('pay')
+        recoveryKeyRef.current = null
+        setPaymentState('idle')
+        setPaymentMessage('')
+      } else if (response.status === 'failed' && response.code === 'PROVIDER_REJECTED') {
+        clearPendingRemittance('pay')
+        recoveryKeyRef.current = null
+        setPaymentState('failed')
+        setPaymentMessage('أكدت الشبكة رفض عملية الصرف السابقة.')
+      } else {
+        setPaymentState('in_progress')
+        setPaymentMessage(response.code === 'VERIFICATION_CONTEXT_MISSING'
+          ? 'تعذر تحديد مرجع طلب الصرف السابق. العملية معلقة وتحتاج مراجعة الدعم.'
+          : response.phase === 'preparing' ? 'طلب الصرف الأصلي لا يزال قيد التجهيز. نواصل التحقق؛ لا تُعد الصرف.'
+          : response.providerSucceeded ? 'تم الصرف لدى الشبكة، وجارٍ إكمال تسجيل العملية محاسبياً. لا تُعد الصرف.'
+          : 'نتيجة الصرف لم تُحسم بعد. لا تُعد الصرف؛ يمكنك التحقق من العملية مرة أخرى.')
+        pollAgain = response.code !== 'VERIFICATION_CONTEXT_MISSING' && response.httpStatus !== 401 && response.httpStatus !== 403
+      }
+    } catch {
+      setPaymentState('uncertain')
+      setPaymentMessage('تعذر الاتصال للتحقق. قد تكون الحوالة صُرفت؛ لا تُعد الصرف.')
+      pollAgain = true
+    } finally {
+      payoutInFlightRef.current = false
+      setIsPaying(false)
+      if (automaticCheck) recoveryChecksRef.current++
+      if (pollAgain && automaticCheck && recoveryMountedRef.current && recoveryChecksRef.current < MAX_AUTO_VERIFICATIONS) {
+        recoveryTimerRef.current = window.setTimeout(() => {
+          recoveryTimerRef.current = null
+          void verifyPayout(true)
+        }, VERIFICATION_DELAY_MS)
+      }
+    }
+  }
 
   // Details of the candidate currently selected in the ambiguous picker (falls
   // back to the identity matched by the search).
@@ -1505,8 +1569,12 @@ export function RemittanceSearchPay() {
     return () => window.removeEventListener("beforeunload", warnBeforeLeave)
   }, [paymentState])
 
-  useEffect(() => () => {
-    if (recoveryTimerRef.current !== null) window.clearTimeout(recoveryTimerRef.current)
+  useEffect(() => {
+    recoveryMountedRef.current = true
+    return () => {
+      recoveryMountedRef.current = false
+      if (recoveryTimerRef.current !== null) window.clearTimeout(recoveryTimerRef.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -1563,6 +1631,10 @@ export function RemittanceSearchPay() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (paymentUnresolved || payoutInFlightRef.current) {
+      toast.warning('تحقق من نتيجة الصرف السابق قبل البحث عن عملية جديدة')
+      return
+    }
     setSearchResult(null)
     setPayResult(null)
     setIsSearching(true)
@@ -1702,19 +1774,24 @@ export function RemittanceSearchPay() {
   const submitAuthorizedPayout = async (
     auth: IdentityAuthorization,
     closeConfirmationOnFailure: boolean,
-    recoveryCheck = false,
   ) => {
     if (!searchResult || payoutInFlightRef.current) return false
-    if (recoveryCheck && recoveryTimerRef.current !== null) {
-      window.clearTimeout(recoveryTimerRef.current)
-      recoveryTimerRef.current = null
-    }
 
     payoutInFlightRef.current = true
     setIsPaying(true)
-    setPaymentState(recoveryCheck ? "checking" : "submitting")
-    setPaymentMessage(recoveryCheck ? "جاري التحقق من نتيجة عملية الدفع السابقة..." : "جاري تنفيذ عملية الدفع...")
+    setPaymentState("submitting")
+    setPaymentMessage("جاري تنفيذ عملية الدفع...")
     let scheduleRecovery = false
+    recoveryKeyRef.current = auth.idempotencyKey
+    recoveryChecksRef.current = 0
+    // Keep display data only; search/identity authorization tokens stay in memory.
+    savePendingRemittance('pay', { key: auth.idempotencyKey, startedAt: Date.now(), snapshot: {
+      searchToken: '', reference: searchResult.reference, networkKey: searchResult.networkKey,
+      amount: searchResult.amount, currencyCode: searchResult.currencyCode,
+      senderName: searchResult.senderName, senderMobile: searchResult.senderMobile,
+      receiverName: searchResult.receiverName, receiverMobile: searchResult.receiverMobile,
+      identityStatus: 'existing' as const, candidates: [],
+    } })
     try {
       const response = await apiClient.agentRemittancePay(
         searchResult.networkKey,
@@ -1728,6 +1805,8 @@ export function RemittanceSearchPay() {
       )
 
       if (response.success) {
+        clearPendingRemittance('pay')
+        recoveryKeyRef.current = null
         setPaymentState("idle")
         setPaymentMessage("")
         setPayResult(normalizePayResult(response.data, searchResult))
@@ -1737,6 +1816,7 @@ export function RemittanceSearchPay() {
       }
 
       if (response.code === "PAYMENT_IN_PROGRESS") {
+        scheduleRecovery = true
         setPaymentState("in_progress")
         setPaymentMessage("عملية الدفع قيد المعالجة. لا تبدأ عملية جديدة؛ تحقق من النتيجة بعد قليل.")
         toast.warning("الدفع قيد المعالجة حالياً — لا تُعد المحاولة الآن، تحقق من الحوالة بعد قليل")
@@ -1744,48 +1824,54 @@ export function RemittanceSearchPay() {
         return false
       }
       if (response.code === "IDEMPOTENCY_KEY_REUSED") {
-        setPaymentState("failed")
-        setPaymentMessage("تعذر متابعة العملية لأن مفتاحها مرتبط بحوالة أخرى. ابحث عن الحوالة من جديد.")
+        setPaymentState("uncertain")
+        setPaymentMessage("مفتاح العملية مرتبط بطلب سابق. راجع العملية السابقة قبل أي صرف جديد.")
         toast.error("مفتاح العملية مستخدم لحوالة أخرى — ابحث عن الحوالة من جديد لبدء عملية جديدة")
         if (closeConfirmationOnFailure) setShowConfirmDialog(false)
         return false
       }
 
-      if (
-        response.code === "UPSTREAM_TIMEOUT" ||
-        response.code === "CLIENT_TIMEOUT" ||
-        response.code === "UPSTREAM_UNAVAILABLE"
-      ) {
+      if (hasUncertainRemittanceOutcome(response)) {
         setPaymentState("uncertain")
-        setPaymentMessage("انتهت مهلة الاستجابة وقد تكون الحوالة صُرفت. سيتم التحقق تلقائياً بنفس مفتاح العملية.")
+        setPaymentMessage(response.providerSucceeded
+          ? 'تم الصرف لدى الشبكة، وجارٍ إكمال تسجيل العملية محاسبياً. لا تُعد الصرف.'
+          : "انتهت مهلة الاستجابة وقد تكون الحوالة صُرفت. سيتم التحقق تلقائياً من العملية الأصلية.")
         setShowConfirmDialog(false)
-        scheduleRecovery = !recoveryCheck
+        scheduleRecovery = true
         toast.warning("انتهت مهلة الاستجابة. لا تُعد الدفع؛ جارٍ التحقق من النتيجة بنفس مفتاح العملية.")
         return false
       }
 
       setPaymentState("failed")
+      clearPendingRemittance('pay')
+      recoveryKeyRef.current = null
       setPaymentMessage(response.message || "فشل في دفع الحوالة")
       toast.error(response.message || "فشل في دفع الحوالة")
       if (closeConfirmationOnFailure) setShowConfirmDialog(false)
       return false
     } catch (error: any) {
-      setPaymentState("failed")
-      setPaymentMessage(error.message || "حدث خطأ أثناء الدفع")
+      setPaymentState("uncertain")
+      scheduleRecovery = true
+      setPaymentMessage("تعذر استلام نتيجة الصرف. جارٍ التحقق؛ لا تُعد الصرف.")
       toast.error(error.message || "حدث خطأ أثناء الدفع")
       if (closeConfirmationOnFailure) setShowConfirmDialog(false)
       return false
     } finally {
       payoutInFlightRef.current = false
       setIsPaying(false)
-      if (scheduleRecovery) {
+      if (scheduleRecovery && recoveryMountedRef.current) {
         recoveryTimerRef.current = window.setTimeout(() => {
           recoveryTimerRef.current = null
-          void submitAuthorizedPayout(auth, false, true)
-        }, 2500)
+          void verifyPayout(true)
+        }, VERIFICATION_DELAY_MS)
       }
     }
   }
+
+  useEffect(() => {
+    if (paymentState !== 'uncertain' || !searchResult || payoutInFlightRef.current || recoveryTimerRef.current !== null || recoveryChecksRef.current !== 0) return
+    recoveryTimerRef.current = window.setTimeout(() => { recoveryTimerRef.current = null; void verifyPayout(true) }, VERIFICATION_DELAY_MS)
+  }, [paymentState, searchResult])
 
   const handleCandidateSelect = (identityId: string) => {
     if (!searchResult || isConfirming || isPaying) return
@@ -1803,6 +1889,7 @@ export function RemittanceSearchPay() {
 
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (paymentUnresolved || payoutInFlightRef.current) return
     if (!searchResult || !flow) return
     if (flow.blocked) {
       toast.error(identityBlockedMessage())
@@ -1978,14 +2065,19 @@ export function RemittanceSearchPay() {
                       : "تعذر إتمام الدفع"}
             </AlertTitle>
             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <span>{paymentMessage}</span>
-              {paymentUnresolved && identityAuth && (
+              <div className="space-y-1" aria-live="polite">
+                <p>{paymentMessage}</p>
+                {paymentUnresolved && recoveryChecksRef.current >= MAX_AUTO_VERIFICATIONS && (
+                  <p className="text-sm">توقف التحقق التلقائي. استخدم «التحقق من نتيجة الدفع» لمتابعة العملية الحالية يدوياً.</p>
+                )}
+              </div>
+              {paymentUnresolved && recoveryKeyRef.current && (
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   disabled={isPaying || paymentState === "checking"}
-                  onClick={() => void submitAuthorizedPayout(identityAuth, false, true)}
+                  onClick={() => void verifyPayout()}
                   className="shrink-0 bg-background"
                 >
                   {isPaying && <Loader2 className="h-4 w-4 animate-spin" />}

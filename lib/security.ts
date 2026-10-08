@@ -212,6 +212,7 @@ export const API_POLICY: RoutePolicy[] = [
   { pattern: ['agent', 'action', 'execute-generic'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'bulk-remittance'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'remittance', 'search'], methods: ['POST'], auth: 'agent', body: 'json' },
+  { pattern: ['agent', 'remittance', 'verify'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'remittance', 'identity', 'upload'], methods: ['POST'], auth: 'agent', body: 'multipart', sensitive: true },
   { pattern: ['agent', 'remittance', 'identity', 'confirm'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'remittance', 'identity', 'document-image'], methods: ['GET'], auth: 'agent', query: ['searchToken', 'slot', 'variant', 'v'] },

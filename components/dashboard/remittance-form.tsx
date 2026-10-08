@@ -26,6 +26,7 @@ import {
 import { CheckCircle2, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle, RotateCcw, FileText, Send, X, Printer } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
+import { savePendingRemittance, loadPendingRemittance, clearPendingRemittance, hasUncertainRemittanceOutcome, VERIFICATION_DELAY_MS, MAX_AUTO_VERIFICATIONS } from "@/lib/pending-remittance"
 import { formatReceiptTimestamp, pickString } from "@/lib/utils"
 import { SharePdfButton } from "@/components/receipt/share-pdf-button"
 
@@ -151,8 +152,21 @@ export function RemittanceForm() {
   const sendRecoveryTimerRef = useRef<number | null>(null)
   const sendKeyRef = useRef<string | null>(null)
   const sendFingerprintRef = useRef("")
+  const sendChecksRef = useRef(0)
+  const sendMountedRef = useRef(true)
 
   const sendUnresolved = ["submitting", "checking", "uncertain", "in_progress"].includes(sendState)
+
+  useEffect(() => {
+    const pending = loadPendingRemittance<NonNullable<typeof confirmData>>('send')
+    if (pending) {
+      sendKeyRef.current = pending.key
+      sendFingerprintRef.current = sendAttemptFingerprint(pending.snapshot)
+      setConfirmData(pending.snapshot)
+      setSendState('uncertain')
+      setSendMessage('تم استعادة إرسال لم تُحسم نتيجته. تحقق من العملية السابقة قبل أي إرسال جديد.')
+    }
+  }, [])
 
   const [senderMobileError, setSenderMobileError] = useState("")
   const [receiverMobileError, setReceiverMobileError] = useState("")
@@ -179,8 +193,12 @@ export function RemittanceForm() {
     return () => window.removeEventListener("beforeunload", warnBeforeLeave)
   }, [sendUnresolved])
 
-  useEffect(() => () => {
-    if (sendRecoveryTimerRef.current !== null) window.clearTimeout(sendRecoveryTimerRef.current)
+  useEffect(() => {
+    sendMountedRef.current = true
+    return () => {
+      sendMountedRef.current = false
+      if (sendRecoveryTimerRef.current !== null) window.clearTimeout(sendRecoveryTimerRef.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -363,12 +381,14 @@ export function RemittanceForm() {
     }
   }
 
-  const submitSend = async (confirmDataToSend: typeof confirmData, recoveryCheck = false) => {
+  const submitSend = async (confirmDataToSend: typeof confirmData, recoveryCheck = false, automaticCheck = false) => {
     if (!confirmDataToSend || sendInFlightRef.current) return false
     if (recoveryCheck && sendRecoveryTimerRef.current !== null) {
       window.clearTimeout(sendRecoveryTimerRef.current)
       sendRecoveryTimerRef.current = null
     }
+    // A manual check cancels the remaining automatic cycle and runs only once.
+    if (recoveryCheck && !automaticCheck) sendChecksRef.current = MAX_AUTO_VERIFICATIONS
 
     sendInFlightRef.current = true
     setSuccess(null)
@@ -395,9 +415,16 @@ export function RemittanceForm() {
     }
     const idempotencyKey = sendKeyRef.current
     let scheduleRecovery = false
+    if (!recoveryCheck) {
+      sendChecksRef.current = 0
+      const { commission: _commission, ...snapshot } = confirmDataToSend
+      savePendingRemittance('send', { key: idempotencyKey, startedAt: Date.now(), snapshot })
+    }
 
     try {
-      const response = await apiClient.agentRemittanceSend(String(confirmDataToSend.distWallet || "unified-network"), {
+      const response = recoveryCheck
+        ? await apiClient.agentRemittanceVerify('send', idempotencyKey)
+        : await apiClient.agentRemittanceSend(String(confirmDataToSend.distWallet || "unified-network"), {
         senderName: confirmDataToSend.senderName,
         senderMobile: confirmDataToSend.senderMobile,
         receiverName: confirmDataToSend.receiverName,
@@ -412,7 +439,8 @@ export function RemittanceForm() {
         } : {}),
       }, idempotencyKey)
 
-      if (response.success) {
+      if (response.success && (!recoveryCheck || response.status === 'completed')) {
+        clearPendingRemittance('send')
         const resData: Record<string, any> =
           typeof response.data === "object" && response.data !== null ? response.data : {}
         clearSendKey(fingerprint)
@@ -452,7 +480,7 @@ export function RemittanceForm() {
             "",
           notes: confirmDataToSend.notes,
           networkName: distWallets.find((w: any) => w.key === confirmDataToSend.distWallet)?.name || String(confirmDataToSend.distWallet || "—"),
-          sentAt: new Date(),
+          sentAt: resData.completedAt ? new Date(resData.completedAt) : new Date(),
         })
         setConfirmData(null)
         setShowDialog(false)
@@ -462,58 +490,75 @@ export function RemittanceForm() {
       }
 
       if (response.code === "PAYMENT_IN_PROGRESS") {
+        scheduleRecovery = true
         setSendState("in_progress")
-        setSendMessage("عملية الإرسال قيد المعالجة. لا تبدأ عملية جديدة؛ تحقق من نتيجة العملية بعد قليل.")
+        setSendMessage(response.phase === 'preparing'
+          ? 'طلب الإرسال الأصلي لا يزال قيد التجهيز. نواصل التحقق تلقائياً؛ لا تُعد الإرسال.'
+          : "عملية الإرسال قيد المعالجة. لا تبدأ عملية جديدة؛ تحقق من نتيجة العملية بعد قليل.")
         toast.warning("الإرسال قيد المعالجة — لا تُعد المحاولة الآن، تحقق من المبلغ المخصوم بعد قليل")
         return false
       }
       if (response.code === "IDEMPOTENCY_KEY_REUSED") {
-        clearSendKey(fingerprint)
-        sendKeyRef.current = null
-        sendFingerprintRef.current = ""
-        setSendState("failed")
-        setSendMessage("تعذر متابعة العملية لأن مفتاحها مرتبط بعملية سابقة. أعد إرسال الحوالة من جديد.")
-        toast.error("مفتاح العملية مستخدم سابقاً — أعد إدخال البيانات وابدأ إرسالاً جديداً")
+        setSendState("uncertain")
+        setSendMessage("المفتاح مرتبط بعملية سابقة. راجع العملية السابقة قبل أي إرسال جديد.")
         return false
       }
-      if (
-        response.code === "UPSTREAM_TIMEOUT" ||
-        response.code === "CLIENT_TIMEOUT" ||
-        response.code === "UPSTREAM_UNAVAILABLE"
-      ) {
+      if (recoveryCheck && response.code === 'PROVIDER_REJECTED' && response.status === 'failed') {
+        clearPendingRemittance('send')
+        setSendState('failed')
+        setSendMessage('أكدت الشبكة رفض الإرسال السابق.')
+        return false
+      }
+      if (recoveryCheck || hasUncertainRemittanceOutcome(response)) {
         setSendState("uncertain")
-        setSendMessage("انتهت مهلة الاستجابة وقد تكون الحوالة أُرسلت. سيتم التحقق تلقائياً بنفس مفتاح العملية.")
+        setSendMessage(response.providerSucceeded
+          ? 'تم الإرسال لدى الشبكة، وجارٍ إكمال تسجيل العملية محاسبياً. لا تُعد الإرسال.'
+          : response.code === 'VERIFICATION_CONTEXT_MISSING'
+            ? 'مرجع طلب الإرسال السابق غير متوفر. العملية معلقة وتحتاج مراجعة الدعم.'
+            : "نتيجة الإرسال لم تُحسم بعد. سيتم التحقق من العملية الأصلية؛ لا تُعد الإرسال.")
         setShowDialog(false)
-        scheduleRecovery = !recoveryCheck
+        scheduleRecovery = response.code !== 'VERIFICATION_CONTEXT_MISSING' && response.httpStatus !== 401 && response.httpStatus !== 403
         toast.warning("انتهت مهلة الاستجابة. لا تُعد الإرسال؛ جارٍ التحقق من النتيجة بنفس مفتاح العملية.")
         return false
       }
 
       setSendState("failed")
+      clearPendingRemittance('send')
       setSendMessage(response.message || "فشل في إرسال الحوالة")
       toast.error(response.message || "فشل في إرسال الحوالة")
       return false
     } catch (err: any) {
-      setSendState("failed")
-      setSendMessage(err.message || "حدث خطأ أثناء إرسال الحوالة")
+      setSendState("uncertain")
+      scheduleRecovery = true
+      setSendMessage("تعذر استلام نتيجة الإرسال. جارٍ التحقق؛ لا تُعد الإرسال.")
       toast.error(err.message || "حدث خطأ أثناء إرسال الحوالة")
       return false
     } finally {
       sendInFlightRef.current = false
       setIsLoading(false)
-      if (scheduleRecovery) {
+      if (recoveryCheck && automaticCheck) sendChecksRef.current++
+      if (scheduleRecovery && (!recoveryCheck || automaticCheck) && sendMountedRef.current && sendChecksRef.current < MAX_AUTO_VERIFICATIONS) {
         sendRecoveryTimerRef.current = window.setTimeout(() => {
           sendRecoveryTimerRef.current = null
-          void submitSend(confirmDataToSend, true)
-        }, 2500)
+          void submitSend(confirmDataToSend, true, true)
+        }, VERIFICATION_DELAY_MS)
       }
     }
   }
 
   const handleConfirmSend = async () => {
+    if (sendUnresolved) return
     if (!confirmData || sendInFlightRef.current) return
     await submitSend(confirmData, false)
   }
+
+  useEffect(() => {
+    if (sendState !== 'uncertain' || !confirmData || sendInFlightRef.current || sendRecoveryTimerRef.current !== null || sendChecksRef.current !== 0) return
+    sendRecoveryTimerRef.current = window.setTimeout(() => {
+      sendRecoveryTimerRef.current = null
+      void submitSend(confirmData, true, true)
+    }, VERIFICATION_DELAY_MS)
+  }, [sendState, confirmData])
 
   return (
     <>
@@ -539,7 +584,15 @@ export function RemittanceForm() {
                     : "تعذر إتمام الإرسال"}
           </AlertTitle>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>{sendMessage}</span>
+            <div className="space-y-1" aria-live="polite">
+              <p>{sendMessage}</p>
+              {sendUnresolved && confirmData && <p className="text-sm font-semibold">
+                {confirmData.amount.toLocaleString()} {confirmData.currencyCode} — {confirmData.receiverName}
+              </p>}
+              {sendUnresolved && sendChecksRef.current >= MAX_AUTO_VERIFICATIONS && <p className="text-sm">
+                انتهت فترة التحقق التلقائي. استخدم «التحقق من نتيجة الإرسال» لمتابعة العملية الحالية.
+              </p>}
+            </div>
             {sendUnresolved && sendKeyRef.current && (
               <Button
                 type="button"
@@ -567,7 +620,7 @@ export function RemittanceForm() {
                     <CheckCircle2 className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold">تم إرسال الحوالة بنجاح</h2>
+                    <h2 className="text-lg font-bold">{success.simulated ? 'محاكاة محلية ناجحة — لم تُرسل حوالة فعلية' : 'تم إرسال الحوالة بنجاح'}</h2>
                     <p className="text-sm text-muted-foreground">
                       {success.duplicated
                         ? "هذه العملية أُرسلت مسبقاً — تم عرض نتيجة العملية السابقة لتجنب التكرار"
@@ -685,7 +738,7 @@ export function RemittanceForm() {
                       </span>
                     </div>
                     <div className="mt-2 border-t border-border/40 pt-2 text-center">
-                      <span className="font-medium text-muted-foreground">هذا الإيصال سند إثبات لعملية الإرسال</span>
+                      <span className="font-medium text-muted-foreground">{success.simulated ? 'إيصال محاكاة فقط — لا يمثل عملية مالية فعلية' : 'هذا الإيصال سند إثبات لعملية الإرسال'}</span>
                     </div>
                   </div>
                 </div>
@@ -712,6 +765,7 @@ export function RemittanceForm() {
 
             <CardContent className="space-y-5">
               <form onSubmit={handleSubmit} className="space-y-5">
+                <fieldset disabled={sendUnresolved} className="space-y-5 disabled:opacity-70">
                 {/* Parties Details */}
                 <div className="form-section space-y-4">
                   <Label className="form-section-title">
@@ -975,6 +1029,7 @@ export function RemittanceForm() {
                     </div>
                   )}
                 </Button>
+                </fieldset>
               </form>
             </CardContent>
           </Card>

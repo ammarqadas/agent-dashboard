@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:send-timeout": "node scripts/dev-send-timeout.cjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

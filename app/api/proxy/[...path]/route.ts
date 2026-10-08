@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { simulateSendTimeout } from '@/lib/send-timeout-simulation'
 import {
   SESSION_COOKIE,
   CSRF_COOKIE,
@@ -48,10 +49,8 @@ const IDENTITY_UPLOAD_UPSTREAM_TIMEOUT_MS =
   Number.isFinite(configuredIdentityUploadTimeout) && configuredIdentityUploadTimeout > UPSTREAM_TIMEOUT_MS
     ? configuredIdentityUploadTimeout
     : 90_000
-// Dev-only timeout simulator for agent/action/execute-generic. Enabling it
-// pauses the upstream fetch so the proxy's own timeout can fire on demand —
-// exercises the real UPSTREAM_TIMEOUT path without a slow backend. Never
-// active in production (IS_PROD guard below).
+// Dev-only REAL send timeout: dispatch once, then abort the proxy's wait early.
+// Verification is left untouched. The backend/provider can still complete.
 const DEV_SIMULATE_EXECUTE_TIMEOUT = process.env.DEV_SIMULATE_EXECUTE_TIMEOUT === 'true'
 const configuredSimulateMs = Number(process.env.DEV_SIMULATE_EXECUTE_TIMEOUT_MS ?? 60_000)
 const DEV_SIMULATE_EXECUTE_TIMEOUT_MS =
@@ -294,6 +293,14 @@ async function handleProxy(
 
   let upstreamRes: Response
   const joinedPath = segments.join('/')
+  if (method === 'POST' && sessionToken && typeof body === 'string') {
+    const simulated = simulateSendTimeout(joinedPath, JSON.parse(body), sessionToken,
+      (request.headers.get('idempotency-key') || '').trim())
+    if (simulated) {
+      if (simulated.status === 504) await new Promise((resolve) => setTimeout(resolve, 1500))
+      return json(simulated.body, simulated.status)
+    }
+  }
   const upstreamTimeoutMs =
     joinedPath === 'agent/action/execute-generic'
       ? PAYOUT_UPSTREAM_TIMEOUT_MS
@@ -301,18 +308,19 @@ async function handleProxy(
         ? IDENTITY_UPLOAD_UPSTREAM_TIMEOUT_MS
         : UPSTREAM_TIMEOUT_MS
 
-  // Dev-only: force the execute-generic timeout so the send/pay recovery UX can
-  // be exercised locally without a slow backend. The pause lets the proxy's own
-  // AbortSignal timeout fire, so the real UPSTREAM_TIMEOUT shape is returned.
-  if (
+  const simulateRealSendTimeout =
     DEV_SIMULATE_EXECUTE_TIMEOUT &&
     !IS_PROD &&
-    joinedPath === 'agent/action/execute-generic'
-  ) {
+    joinedPath === 'agent/action/execute-generic' &&
+    method === 'POST' &&
+    typeof body === 'string' && JSON.parse(body).configType === 'send'
+  const effectiveTimeoutMs = simulateRealSendTimeout
+    ? Math.min(upstreamTimeoutMs, DEV_SIMULATE_EXECUTE_TIMEOUT_MS)
+    : upstreamTimeoutMs
+  if (simulateRealSendTimeout) {
     console.warn(
-      `[dev] Simulating execute-generic timeout: pausing ${DEV_SIMULATE_EXECUTE_TIMEOUT_MS}ms (upstream timeout ${upstreamTimeoutMs}ms)`
+      `[dev] REAL send timeout test: forwarding once and aborting the response wait after ${effectiveTimeoutMs}ms`
     )
-    await new Promise((resolve) => setTimeout(resolve, DEV_SIMULATE_EXECUTE_TIMEOUT_MS))
   }
 
   try {
@@ -321,7 +329,7 @@ async function handleProxy(
       headers,
       body,
       cache: 'no-store',
-      signal: AbortSignal.timeout(upstreamTimeoutMs),
+      signal: AbortSignal.timeout(effectiveTimeoutMs),
     })
   } catch (error) {
     console.error('Proxy upstream error:', error instanceof Error ? error.message : error)
@@ -329,7 +337,7 @@ async function handleProxy(
       error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
     const timeoutMessage =
       joinedPath === 'agent/action/execute-generic'
-        ? 'Operation timed out. Its final status is uncertain; retry with the same idempotency key.'
+        ? 'Operation timed out. Its final status is uncertain; verify the original operation before taking further action.'
         : joinedPath === 'agent/remittance/identity/upload'
           ? 'Identity upload timed out. Please try again.'
           : 'Upstream request timed out.'
