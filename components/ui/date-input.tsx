@@ -3,6 +3,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
+import { identityDateToInput } from "@/lib/identity-date"
 
 // Keep only digits and shape them into DD-MM-YYYY (max 10 chars).
 function maskDateValue(value: string): string {
@@ -33,9 +34,7 @@ export function dateInputToISO(value: string): string {
 
 // "YYYY-MM-DD" → "DD-MM-YYYY" for prefilling the input ("" when not ISO).
 export function isoToDateInput(value: string | undefined | null): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""))
-  if (!match) return ""
-  return `${match[3]}-${match[2]}-${match[1]}`
+  return identityDateToInput(value)
 }
 
 // Plain masked text input — no calendar picker.

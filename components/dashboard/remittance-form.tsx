@@ -26,7 +26,7 @@ import {
 import { CheckCircle2, ArrowRightLeft, User, Phone, Coins, Loader2, AlertTriangle, RotateCcw, FileText, Send, X, Printer } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
-import { savePendingRemittance, loadPendingRemittance, clearPendingRemittance, hasUncertainRemittanceOutcome, VERIFICATION_DELAY_MS, MAX_AUTO_VERIFICATIONS } from "@/lib/pending-remittance"
+import { savePendingRemittance, loadPendingRemittance, clearPendingRemittance, hasUncertainRemittanceOutcome, remittanceSessionKey, VERIFICATION_DELAY_MS, MAX_AUTO_VERIFICATIONS } from "@/lib/pending-remittance"
 import { formatReceiptTimestamp, pickString } from "@/lib/utils"
 import { SharePdfButton } from "@/components/receipt/share-pdf-button"
 
@@ -66,7 +66,7 @@ function sendAttemptFingerprint(data: {
 }
 
 function sendAttemptStorageKey(fingerprint: string): string {
-  return `remittance-send:${fingerprint}`
+  return remittanceSessionKey('remittance-send', fingerprint)
 }
 
 function getOrCreateSendKey(fingerprint: string): string {
@@ -255,11 +255,7 @@ export function RemittanceForm() {
   const selectedCurrency = currencies.find(c => String(c.id) === formData.currency)
   const selectedNetwork = distWallets.find(w => w.key === formData.distWallet)
 
-  const handleReset = () => {
-    if (sendUnresolved) {
-      toast.warning("تحقق من نتيجة عملية الإرسال الحالية قبل بدء إرسال جديد")
-      return
-    }
+  const resetSendForm = (preserveAttemptKey = false) => {
     if (sendRecoveryTimerRef.current !== null) {
       window.clearTimeout(sendRecoveryTimerRef.current)
       sendRecoveryTimerRef.current = null
@@ -278,13 +274,32 @@ export function RemittanceForm() {
     setSuccessDismissed(false)
     setCommissionResult(null)
     setConfirmData(null)
-    if (sendKeyRef.current && sendFingerprintRef.current) {
+    setShowDialog(false)
+    clearPendingRemittance('send')
+    if (!preserveAttemptKey && sendKeyRef.current && sendFingerprintRef.current) {
       clearSendKey(sendFingerprintRef.current)
     }
     sendKeyRef.current = null
     sendFingerprintRef.current = ""
     setSendState("idle")
     setSendMessage("")
+  }
+
+  const handleReset = () => {
+    if (sendUnresolved) {
+      toast.warning("تحقق من نتيجة عملية الإرسال الحالية قبل بدء إرسال جديد")
+      return
+    }
+    resetSendForm()
+  }
+
+  const clearVerificationUi = () => {
+    if (sendInFlightRef.current) return
+    sendChecksRef.current = MAX_AUTO_VERIFICATIONS
+    // Clear display/timers only. Retain the fingerprint's original attempt key:
+    // re-entering the same operation cannot silently create a duplicate send.
+    resetSendForm(true)
+    toast.info('تم مسح متابعة التحقق فقط. العملية السابقة لم تُلغَ لدى الشبكة.')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -499,25 +514,35 @@ export function RemittanceForm() {
         return false
       }
       if (response.code === "IDEMPOTENCY_KEY_REUSED") {
-        setSendState("uncertain")
+        clearPendingRemittance('send')
+        sendChecksRef.current = MAX_AUTO_VERIFICATIONS
+        setSendState("failed")
         setSendMessage("المفتاح مرتبط بعملية سابقة. راجع العملية السابقة قبل أي إرسال جديد.")
         return false
       }
-      if (recoveryCheck && response.code === 'PROVIDER_REJECTED' && response.status === 'failed') {
+      if (response.code === 'PROVIDER_REJECTED' && response.status === 'failed') {
         clearPendingRemittance('send')
+        clearSendKey(fingerprint)
+        sendKeyRef.current = null
+        sendFingerprintRef.current = ''
         setSendState('failed')
-        setSendMessage('أكدت الشبكة رفض الإرسال السابق.')
+        setSendMessage(response.message || 'أكدت الشبكة رفض الإرسال السابق.')
+        setShowDialog(false)
         return false
       }
       if (recoveryCheck || hasUncertainRemittanceOutcome(response)) {
+        if (response.manualReview) sendChecksRef.current = MAX_AUTO_VERIFICATIONS
         setSendState("uncertain")
         setSendMessage(response.providerSucceeded
           ? 'تم الإرسال لدى الشبكة، وجارٍ إكمال تسجيل العملية محاسبياً. لا تُعد الإرسال.'
+          : response.manualReview ? 'العملية تحتاج مراجعة الدعم لتأكيد نتيجتها. لا تُعد الإرسال.'
+          : response.code === 'PROVIDER_DUPLICATE_PENDING' ? 'توجد عملية سابقة لدى الشبكة. نتحقق من العملية الأصلية؛ لا تُعد الإرسال.'
+          : response.code === 'PROVIDER_DEADLOCK_PENDING' ? 'حدث تعارض مؤقت لدى الشبكة. نتحقق من نتيجة الطلب الأصلي؛ لا تُعد الإرسال.'
           : response.code === 'VERIFICATION_CONTEXT_MISSING'
             ? 'مرجع طلب الإرسال السابق غير متوفر. العملية معلقة وتحتاج مراجعة الدعم.'
             : "نتيجة الإرسال لم تُحسم بعد. سيتم التحقق من العملية الأصلية؛ لا تُعد الإرسال.")
         setShowDialog(false)
-        scheduleRecovery = response.code !== 'VERIFICATION_CONTEXT_MISSING' && response.httpStatus !== 401 && response.httpStatus !== 403
+        scheduleRecovery = !response.manualReview && response.code !== 'VERIFICATION_CONTEXT_MISSING' && response.httpStatus !== 401 && response.httpStatus !== 403
         toast.warning("انتهت مهلة الاستجابة. لا تُعد الإرسال؛ جارٍ التحقق من النتيجة بنفس مفتاح العملية.")
         return false
       }
@@ -594,6 +619,7 @@ export function RemittanceForm() {
               </p>}
             </div>
             {sendUnresolved && sendKeyRef.current && (
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
               <Button
                 type="button"
                 size="sm"
@@ -605,6 +631,18 @@ export function RemittanceForm() {
                 {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                 التحقق من نتيجة الإرسال
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isLoading || sendState === 'checking' || sendState === 'submitting'}
+                onClick={clearVerificationUi}
+                className="bg-background"
+              >
+                <X className="h-4 w-4" />
+                الغاء العملية
+              </Button>
+              </div>
             )}
           </AlertDescription>
         </Alert>

@@ -202,6 +202,7 @@ export type RoutePolicy = {
 
 // Exact allowlist of upstream endpoints exposed through the proxy.
 export const API_POLICY: RoutePolicy[] = [
+  { pattern: ['personal-data', 'register'], methods: ['POST'], auth: 'agent', body: 'multipart', sensitive: true },
   { pattern: ['agent', 'login'], methods: ['POST'], auth: 'public', body: 'json', isLogin: true },
   { pattern: ['agent', 'change-password'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['agent', 'create-wallet'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },

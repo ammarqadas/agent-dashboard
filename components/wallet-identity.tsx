@@ -33,7 +33,10 @@ export function WalletIdentity({
     ? `/api/proxy/agent/identities/${encodeURIComponent(String(identityRef))}/document-image`
     : undefined
   const document = linkedIdentityDocument(identity)
-  const fullName = identity?.fullName || wallet?.name || ""
+  const [fullName, setFullName] = useState(identity?.fullName || wallet?.name || "")
+  const [address, setAddress] = useState(identity?.address || wallet?.address || "")
+  const [birthdate, setBirthdate] = useState(() => isoToDateInput(identity?.dateOfBirth || ""))
+  const [gender, setGender] = useState<"male" | "female" | "">(identity?.gender || "")
   const verified = identity?.status === "verified"
   const isActive = wallet?.active !== false
   const locked = verified || isActive
@@ -77,10 +80,14 @@ export function WalletIdentity({
 
   useEffect(() => {
     const current = linkedIdentityDocument(identity)
+    setFullName(identity?.fullName || wallet?.name || "")
+    setAddress(identity?.address || wallet?.address || "")
+    setBirthdate(isoToDateInput(identity?.dateOfBirth || ""))
+    setGender(identity?.gender || "")
     setIdNumber(current?.number || "")
     setType(current?.attachmentType === "passport" ? "passport" : "national")
     setExpdate(isoToDateInput(current?.expiryDate || ""))
-  }, [identity])
+  }, [identity, wallet])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,10 +114,30 @@ export function WalletIdentity({
   }
 
   const validateForm = (): string | "" => {
+    if (!fullName.trim()) return "أدخل الاسم الكامل كما يظهر في الهوية"
+    if (fullName.trim().split(/\s+/).length < 3) return "أدخل الاسم الأول واسم الأب واسم العائلة على الأقل"
+    if (!idNumber.trim()) return "أدخل رقم الهوية"
+    if (birthdate && !isValidDateInput(birthdate)) {
+      return "تاريخ الميلاد غير مكتمل — أدخل التاريخ بصيغة DD-MM-YYYY"
+    }
+    if (birthdate && new Date(dateInputToISO(birthdate)) > new Date()) {
+      return "تاريخ الميلاد لا يمكن أن يكون في المستقبل"
+    }
     if (expdate && !isValidDateInput(expdate)) {
       return "تاريخ الانتهاء غير مكتمل — أدخل التاريخ بصيغة DD-MM-YYYY"
     }
     const hasNewImage = Object.values(identityImages.files).some(Boolean)
+    const documentChanged = identityRef && (
+      idNumber !== (document?.number || "") ||
+      type !== (document?.attachmentType === "passport" ? "passport" : "national") ||
+      expdate !== isoToDateInput(document?.expiryDate || "")
+    )
+    if (documentChanged && (!identityImages.files.front || !identityImages.files.back)) {
+      return "لتغيير رقم الهوية أو نوعها أو تاريخ الانتهاء، ارفع صورتي الوجه والخلف مع البيانات الجديدة"
+    }
+    if ((!address.trim() && identity?.address) || (!birthdate && identity?.dateOfBirth) || (!gender && identity?.gender)) {
+      return "لا يدعم الخادم حذف البيانات الشخصية المسجلة؛ أدخل قيمة بديلة"
+    }
     if (!identityRef && (!identityImages.files.front || !identityImages.files.back)) {
       return "اربط الهوية الموجودة أولاً، أو ارفع صورتي الوجه والخلف لتسجيل هوية جديدة."
     }
@@ -123,6 +150,10 @@ export function WalletIdentity({
   const performSave = async (): Promise<boolean> => {
     const res = await apiClient.agentUpsertWalletIdentity({
       walletId,
+      fullName: fullName.trim().replace(/\s+/g, " "),
+      address: address.trim() || undefined,
+      dateOfBirth: birthdate ? dateInputToISO(birthdate) : undefined,
+      gender: gender || undefined,
       idNumber: idNumber || undefined,
       type,
       expdate: expdate ? dateInputToISO(expdate) : undefined,
@@ -134,6 +165,8 @@ export function WalletIdentity({
       setError(res.message || "Failed to save identity")
       return false
     }
+    // The save endpoint determines success. Refresh through onUpdated after
+    // the operation, without making read-back comparisons an activation gate.
     identityImages.reset()
     return true
   }
@@ -150,7 +183,16 @@ export function WalletIdentity({
     }
     setActivating(true)
     try {
-      const hasNewData = Boolean(identityImages.files.front || identityImages.files.back || identityImages.files.selfie)
+      const hasNewData = Boolean(
+        identityImages.files.front || identityImages.files.back || identityImages.files.selfie ||
+        fullName !== (identity?.fullName || wallet?.name || "") ||
+        address !== (identity?.address || wallet?.address || "") ||
+        birthdate !== isoToDateInput(identity?.dateOfBirth || "") ||
+        gender !== (identity?.gender || "") ||
+        idNumber !== (document?.number || "") ||
+        expdate !== isoToDateInput(document?.expiryDate || "") ||
+        type !== (document?.attachmentType === "passport" ? "passport" : "national")
+      )
       if (!identityRef || hasNewData) {
         const ok = await performSave()
         if (!ok) return
@@ -179,9 +221,34 @@ export function WalletIdentity({
         ? "الصور اختيارية، وعند تحديثها يجب رفع الوجهين الأمامي والخلفي معاً — التفعيل يتم بالحفظ"
         : "اربط هوية مطابقة موجودة، أو ارفع الوجهين لتسجيل هوية جديدة — ثم فعّل المحفظة من زر حفظ وتفعيل"
 
+  const personalDetails = (
+    <>
+        <div className="flex flex-col gap-2 md:col-span-2">
+          <Label htmlFor="identity-address">العنوان</Label>
+          <Input id="identity-address" value={address} onChange={(e) => setAddress(e.target.value)}
+            readOnly={locked} placeholder="المدينة، المنطقة، الشارع" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="identity-birthdate">تاريخ الميلاد</Label>
+          <DateInput id="identity-birthdate" value={birthdate}
+            onChange={(e) => setBirthdate(e.target.value)} disabled={locked} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="identity-gender">الجنس</Label>
+          <Select value={gender} onValueChange={(value) => setGender(value as "male" | "female")} disabled={locked}>
+            <SelectTrigger id="identity-gender"><SelectValue placeholder="اختر الجنس" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="male">ذكر</SelectItem>
+              <SelectItem value="female">أنثى</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+    </>
+  )
+
   return (
-    <Card>
-      <CardHeader>
+    <Card className="rounded-xl [&_input]:h-10 [&_button[role=combobox]]:h-10 [&_label]:text-xs">
+      <CardHeader className="px-4 py-4">
         <div className="flex items-center gap-2">
           <div className="icon-container">
             <User className="h-5 w-5" />
@@ -192,9 +259,9 @@ export function WalletIdentity({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4 pb-4">
         {!locked && !identityRef && (
-          <div className="mb-5 rounded-lg border bg-muted/30 p-4">
+          <div className="mb-4 rounded-lg border bg-muted/30 p-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold">هل هوية العميل مسجلة مسبقاً؟</p>
@@ -207,14 +274,15 @@ export function WalletIdentity({
             </div>
           </div>
         )}
-        {!locked && <form onSubmit={handleSave} className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
+        {!locked && <form onSubmit={handleSave} className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="fullName" className="text-right block">الاسم الكامل</Label>
               <Input
                 id="fullName"
                 value={fullName}
-                readOnly
+                onChange={(e) => setFullName(e.target.value)}
+                required
                 placeholder="الاسم الكامل"
               />
             </div>
@@ -251,6 +319,7 @@ export function WalletIdentity({
                 disabled={verified}
               />
             </div>
+            {personalDetails}
           </div>
 
           <IdentityImagesSection
@@ -270,7 +339,7 @@ export function WalletIdentity({
               <Button
                 type="button"
                 onClick={handleActivate}
-                disabled={isSaving || locked}
+                disabled={isSaving || locked || activating || isLinking}
                 className="min-w-40"
               >
                 {activating ? "جاري التفعيل..." : "حفظ وتفعيل"}
@@ -282,7 +351,7 @@ export function WalletIdentity({
           </div>
         </form>}
         {locked && (
-          <div className="grid gap-4 md:grid-cols-2 text-right">
+          <div className="grid gap-3 md:grid-cols-2 text-right">
             <div className="space-y-2">
               <Label className="text-right block">الاسم الكامل</Label>
               <Input id="fullName" value={fullName} readOnly placeholder="الاسم الكامل" />
@@ -308,6 +377,7 @@ export function WalletIdentity({
                 dir="ltr"
               />
             </div>
+            {personalDetails}
           </div>
         )}
         {locked && (

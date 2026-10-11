@@ -41,7 +41,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
-import { savePendingRemittance, loadPendingRemittance, clearPendingRemittance, hasUncertainRemittanceOutcome, VERIFICATION_DELAY_MS, MAX_AUTO_VERIFICATIONS } from "@/lib/pending-remittance"
+import { savePendingRemittance, loadPendingRemittance, clearPendingRemittance, hasUncertainRemittanceOutcome, remittanceSessionKey, VERIFICATION_DELAY_MS, MAX_AUTO_VERIFICATIONS } from "@/lib/pending-remittance"
 import { formatReceiptTimestamp, pickString } from "@/lib/utils"
 import { DateInput, isValidDateInput, dateInputToISO, isoToDateInput } from "@/components/ui/date-input"
 import { SharePdfButton } from "@/components/receipt/share-pdf-button"
@@ -159,7 +159,7 @@ function newIdempotencyKey(): string {
 }
 
 function payoutAttemptStorageKey(result: SearchResult): string {
-  return `remittance-payout:${result.networkKey}:${result.reference}`
+  return remittanceSessionKey('remittance-payout', `${result.networkKey}:${result.reference}`)
 }
 
 function getOrCreatePayoutKey(result: SearchResult): string {
@@ -183,6 +183,10 @@ function getOrCreatePayoutKey(result: SearchResult): string {
     sessionStorage.setItem(storageKey, JSON.stringify({ key, createdAt: Date.now() }))
   } catch {}
   return key
+}
+
+function clearRejectedPayoutKey(result: SearchResult) {
+  try { sessionStorage.removeItem(payoutAttemptStorageKey(result)) } catch {}
 }
 
 const ID_TYPE_LABELS: Record<"national" | "passport", string> = {
@@ -1495,6 +1499,8 @@ export function RemittanceSearchPay() {
         setPaymentMessage('')
       } else if (response.status === 'failed' && response.code === 'PROVIDER_REJECTED') {
         clearPendingRemittance('pay')
+        clearRejectedPayoutKey(searchResult)
+        setIdentityAuth(null)
         recoveryKeyRef.current = null
         setPaymentState('failed')
         setPaymentMessage('أكدت الشبكة رفض عملية الصرف السابقة.')
@@ -1502,10 +1508,11 @@ export function RemittanceSearchPay() {
         setPaymentState('in_progress')
         setPaymentMessage(response.code === 'VERIFICATION_CONTEXT_MISSING'
           ? 'تعذر تحديد مرجع طلب الصرف السابق. العملية معلقة وتحتاج مراجعة الدعم.'
+          : response.manualReview ? 'العملية تحتاج مراجعة الدعم لتأكيد نتيجتها. لا تُعد الصرف.'
           : response.phase === 'preparing' ? 'طلب الصرف الأصلي لا يزال قيد التجهيز. نواصل التحقق؛ لا تُعد الصرف.'
           : response.providerSucceeded ? 'تم الصرف لدى الشبكة، وجارٍ إكمال تسجيل العملية محاسبياً. لا تُعد الصرف.'
           : 'نتيجة الصرف لم تُحسم بعد. لا تُعد الصرف؛ يمكنك التحقق من العملية مرة أخرى.')
-        pollAgain = response.code !== 'VERIFICATION_CONTEXT_MISSING' && response.httpStatus !== 401 && response.httpStatus !== 403
+        pollAgain = !response.manualReview && response.code !== 'VERIFICATION_CONTEXT_MISSING' && response.httpStatus !== 401 && response.httpStatus !== 403
       }
     } catch {
       setPaymentState('uncertain')
@@ -1832,18 +1839,23 @@ export function RemittanceSearchPay() {
       }
 
       if (hasUncertainRemittanceOutcome(response)) {
+        if (response.manualReview) recoveryChecksRef.current = MAX_AUTO_VERIFICATIONS
         setPaymentState("uncertain")
         setPaymentMessage(response.providerSucceeded
           ? 'تم الصرف لدى الشبكة، وجارٍ إكمال تسجيل العملية محاسبياً. لا تُعد الصرف.'
           : "انتهت مهلة الاستجابة وقد تكون الحوالة صُرفت. سيتم التحقق تلقائياً من العملية الأصلية.")
         setShowConfirmDialog(false)
-        scheduleRecovery = true
+        scheduleRecovery = !response.manualReview
         toast.warning("انتهت مهلة الاستجابة. لا تُعد الدفع؛ جارٍ التحقق من النتيجة بنفس مفتاح العملية.")
         return false
       }
 
       setPaymentState("failed")
       clearPendingRemittance('pay')
+      if (response.code === 'PROVIDER_REJECTED' && response.status === 'failed') {
+        clearRejectedPayoutKey(searchResult)
+        setIdentityAuth(null)
+      }
       recoveryKeyRef.current = null
       setPaymentMessage(response.message || "فشل في دفع الحوالة")
       toast.error(response.message || "فشل في دفع الحوالة")
@@ -1889,7 +1901,7 @@ export function RemittanceSearchPay() {
 
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (paymentUnresolved || payoutInFlightRef.current) return
+    if (paymentUnresolved || payoutInFlightRef.current || paymentState === 'failed') return
     if (!searchResult || !flow) return
     if (flow.blocked) {
       toast.error(identityBlockedMessage())
@@ -2100,7 +2112,7 @@ export function RemittanceSearchPay() {
           identityLocked={identityLocked}
           identityComplete={identityComplete}
           isPaying={isPaying}
-          paymentBlocked={paymentUnresolved}
+          paymentBlocked={paymentUnresolved || paymentState === 'failed'}
           isConfirming={isConfirming}
           confirmIdNumber={confirmIdNumber}
           networks={networks}

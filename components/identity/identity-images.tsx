@@ -74,14 +74,14 @@ function IdentityImageCard({
       </div>
 
       <div
-        className={`relative h-32 rounded-xl border-2 border-dashed overflow-hidden ${
+        className={`relative aspect-[86/54] rounded-xl border-2 border-dashed overflow-hidden ${
           preview ? "border-emerald-300 bg-emerald-500/5" : "border-border/60 bg-muted/30"
         }`}
       >
         {preview ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={preview} alt={label} className="absolute inset-0 h-full w-full object-cover" />
+            <img src={preview} alt={label} className="absolute inset-0 h-full w-full object-contain" />
             {!locked && (
               <div className="absolute bottom-1.5 inset-x-0 flex justify-center gap-1.5">
                 <Button type="button" size="sm" variant="secondary" className="h-7 text-xs px-2 shadow-sm" onClick={pick}>
@@ -199,8 +199,7 @@ export function IdentityImageGallery({
             <img
               src={img.url}
               alt={img.labelAr}
-              className="w-full rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity"
-              style={{ minHeight: "180px", maxHeight: "260px" }}
+              className="aspect-[86/54] w-full rounded-lg object-contain cursor-pointer hover:opacity-90 transition-opacity"
               onClick={() => window.open(img.fullUrl || img.url, "_blank")}
             />
           </div>

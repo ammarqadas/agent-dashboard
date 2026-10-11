@@ -556,6 +556,9 @@ class ApiClient {
   async agentUpsertWalletIdentity(args: {
     walletId: string | number
     fullName?: string
+    address?: string
+    dateOfBirth?: string
+    gender?: 'male' | 'female'
     idNumber?: string
     type?: 'national' | 'passport'
     expdate?: string
@@ -565,7 +568,17 @@ class ApiClient {
   }) {
     const fd = new FormData()
     fd.set('walletId', String(args.walletId))
-    if (args.fullName) fd.set('fullName', args.fullName)
+    if (args.fullName) {
+      const parts = args.fullName.trim().split(/\s+/)
+      fd.set('fullName', parts.join(' '))
+      fd.set('firstName', parts[0] || '')
+      fd.set('fatherName', parts[1] || '')
+      fd.set('familyName', parts.length >= 3 ? parts[parts.length - 1] : '')
+      if (parts.length > 3) fd.set('grandFatherName', parts.slice(2, -1).join(' '))
+    }
+    if (args.address) fd.set('address', args.address)
+    if (args.dateOfBirth) fd.set('dateOfBirth', args.dateOfBirth)
+    if (args.gender) fd.set('gender', args.gender)
     if (args.idNumber) fd.set('idNumber', args.idNumber)
     if (args.type) fd.set('type', args.type)
     if (args.expdate) fd.set('expdate', args.expdate)
@@ -574,7 +587,7 @@ class ApiClient {
     if (args.idImageSelfi) fd.set('idImageSelfi', args.idImageSelfi)
 
     // IMPORTANT: don't set Content-Type; browser will set multipart boundary
-    return this.request('/wallet-cards/with-upload', {
+    return this.request('/personal-data/register', {
       method: 'POST',
       body: fd,
       headers: {}, // avoid JSON content-type

@@ -25,6 +25,9 @@ export type LinkedIdentity = {
   id: string
   fullName: string
   mobile?: string
+  address?: string | null
+  dateOfBirth?: string | null
+  gender?: 'male' | 'female' | null
   status?: "pending" | "verified" | "rejected"
   documentRef?: string | null
   attachments?: LinkedIdentityAttachment[]

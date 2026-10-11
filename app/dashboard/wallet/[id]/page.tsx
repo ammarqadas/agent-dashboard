@@ -26,7 +26,7 @@ export default function WalletDetailPage() {
   const loadWallet = async () => {
     setIsLoading(true)
     try {
-      const response = await apiClient.getWallet(walletId, 3)
+      const response = await apiClient.getWallet(walletId)
       if (response.success) {
         const walletData: any = response.data || response
         setWallet(walletData)

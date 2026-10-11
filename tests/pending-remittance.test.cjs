@@ -9,7 +9,7 @@ const helper = new Module(file, module)
 helper._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText, file)
-const { savePendingRemittance, loadPendingRemittance, clearPendingRemittance, hasUncertainRemittanceOutcome } = helper.exports
+const { savePendingRemittance, loadPendingRemittance, clearPendingRemittance, hasUncertainRemittanceOutcome, remittanceSessionKey } = helper.exports
 
 test('unresolved attempts survive refresh/TTL and remain scoped to the agent', () => {
   const store = new Map([['agentUser', '{"id":113}']])
@@ -20,7 +20,9 @@ test('unresolved attempts survive refresh/TTL and remain scoped to the agent', (
   assert.deepEqual(loadPendingRemittance('pay'), pending)
   sessionStorage.setItem('agentUser', '{"id":114}')
   assert.equal(loadPendingRemittance('pay'), null)
+  const secondAgentKey = remittanceSessionKey('remittance-send', 'same-request')
   sessionStorage.setItem('agentUser', '{"id":113}')
+  assert.notEqual(remittanceSessionKey('remittance-send', 'same-request'), secondAgentKey)
   clearPendingRemittance('pay')
   assert.equal(loadPendingRemittance('pay'), null)
 })
@@ -29,4 +31,5 @@ test('transport errors retain uncertainty and definitive rejection is separate',
   assert.equal(!!hasUncertainRemittanceOutcome({ status: 'pending' }), true)
   assert.equal(hasUncertainRemittanceOutcome({ httpStatus: 502 }), true)
   assert.equal(hasUncertainRemittanceOutcome({ status: 'failed', code: 'PROVIDER_REJECTED', httpStatus: 409 }), false)
+  assert.equal(hasUncertainRemittanceOutcome({ status: 'failed', code: 'PROVIDER_REJECTED', message: 'Provider rejected a timeout condition' }), false)
 })
