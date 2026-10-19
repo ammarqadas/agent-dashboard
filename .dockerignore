@@ -3,6 +3,18 @@ node_modules
 out
 build
 coverage
+.compiled
+**/*.test.*
+**/*.spec.*
+**/tests/**
+**/__tests__/**
+**/__mocks__/**
+**/test_*.py
+**/*_test.py
+**/test-results/**
+**/playwright-report/**
+**/blob-report/**
+**/coverage/**
 
 .git
 .gitignore

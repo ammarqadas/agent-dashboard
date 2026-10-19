@@ -168,6 +168,11 @@ export function RemittanceForm() {
     }
   }, [])
 
+  const [senderNameError, setSenderNameError] = useState("")
+  const [receiverNameError, setReceiverNameError] = useState("")
+  const NAME_ERR = "يجب أن يتكون الاسم من 4 كلمات على الأقل"
+  const isValidName = (name: string): boolean => name.trim().split(/\s+/).filter(Boolean).length >= 4
+
   const [senderMobileError, setSenderMobileError] = useState("")
   const [receiverMobileError, setReceiverMobileError] = useState("")
   const MOBILE_ERR = "أدخل رقم جوال صحيح: 9 أرقام تبدأ بـ 7 (مثال: 777123456)"
@@ -270,6 +275,8 @@ export function RemittanceForm() {
       distWallet: '',
       notes: ''
     })
+    setSenderNameError("")
+    setReceiverNameError("")
     setSuccess(null)
     setSuccessDismissed(false)
     setCommissionResult(null)
@@ -306,6 +313,14 @@ export function RemittanceForm() {
     e.preventDefault()
     if (sendUnresolved) {
       toast.warning("تحقق من نتيجة عملية الإرسال الحالية قبل بدء إرسال جديد")
+      return
+    }
+    const senderNameValid = isValidName(formData.senderName)
+    const receiverNameValid = isValidName(formData.receiverName)
+    setSenderNameError(senderNameValid ? "" : NAME_ERR)
+    setReceiverNameError(receiverNameValid ? "" : NAME_ERR)
+    if (!senderNameValid || !receiverNameValid) {
+      toast.error("يجب أن يتكون اسم المرسل واسم المستلم من 4 كلمات على الأقل")
       return
     }
     setSuccess(null)
@@ -817,13 +832,22 @@ export function RemittanceForm() {
                         <User className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                         <Input
                           id="senderName"
-                          placeholder="الاسم الثلاثي"
+                          placeholder="الاسم الرباعي على الأقل"
                           value={formData.senderName}
-                          onChange={(e) => handleChange('senderName', e.target.value)}
+                          onChange={(e) => {
+                            handleChange('senderName', e.target.value)
+                            if (senderNameError) setSenderNameError("")
+                          }}
+                          onBlur={() => {
+                            setSenderNameError(isValidName(formData.senderName) ? "" : NAME_ERR)
+                          }}
                           required
-                          className="pr-10"
+                          aria-invalid={!!senderNameError}
+                          aria-describedby={senderNameError ? "senderName-error" : undefined}
+                          className={`pr-10 ${senderNameError ? "border-destructive" : ""}`}
                         />
                       </div>
+                      {senderNameError && <p id="senderName-error" className="text-xs text-destructive">{senderNameError}</p>}
                     </div>
                     <div className="form-field">
                       <Label htmlFor="senderMobile" className="text-sm font-medium">جوال المرسل</Label>
@@ -858,13 +882,22 @@ export function RemittanceForm() {
                         <User className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                         <Input
                           id="receiverName"
-                          placeholder="الاسم الثلاثي"
+                          placeholder="الاسم الرباعي على الأقل"
                           value={formData.receiverName}
-                          onChange={(e) => handleChange('receiverName', e.target.value)}
+                          onChange={(e) => {
+                            handleChange('receiverName', e.target.value)
+                            if (receiverNameError) setReceiverNameError("")
+                          }}
+                          onBlur={() => {
+                            setReceiverNameError(isValidName(formData.receiverName) ? "" : NAME_ERR)
+                          }}
                           required
-                          className="pr-10"
+                          aria-invalid={!!receiverNameError}
+                          aria-describedby={receiverNameError ? "receiverName-error" : undefined}
+                          className={`pr-10 ${receiverNameError ? "border-destructive" : ""}`}
                         />
                       </div>
+                      {receiverNameError && <p id="receiverName-error" className="text-xs text-destructive">{receiverNameError}</p>}
                     </div>
                     <div className="form-field">
                       <Label htmlFor="receiverMobile" className="text-sm font-medium">جوال المستلم</Label>

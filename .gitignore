@@ -7,6 +7,18 @@
 
 # testing
 /coverage
+**/*.test.*
+**/*.spec.*
+**/tests/**
+**/__tests__/**
+**/__mocks__/**
+**/test_*.py
+**/*_test.py
+**/test-results/**
+**/playwright-report/**
+**/blob-report/**
+**/coverage/**
+/.compiled/
 
 # next.js
 /.next/
@@ -38,5 +50,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
 

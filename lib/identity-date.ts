@@ -14,3 +14,20 @@ export function identityDateToInput(value: string | undefined | null): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text)
   return match ? `${match[3]}-${match[2]}-${match[1]}` : ""
 }
+
+export function isValidDateInput(value: string): boolean {
+  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value)
+  if (!match) return false
+  const day = Number(match[1])
+  const month = Number(match[2])
+  const year = Number(match[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false
+  const date = new Date(year, month - 1, day)
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+}
+
+export function dateInputToISO(value: string): string {
+  if (!isValidDateInput(value)) return ''
+  const [day, month, year] = value.split('-')
+  return `${year}-${month}-${day}`
+}

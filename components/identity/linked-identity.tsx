@@ -19,6 +19,7 @@ export type LinkedIdentityAttachment = {
   issuePlace: string | null
   files: LinkedIdentityAttachmentFile[]
   createdAt?: string
+  status?: "pending" | "verified" | "rejected" | "superseded"
 }
 
 export type LinkedIdentity = {

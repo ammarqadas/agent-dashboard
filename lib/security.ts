@@ -221,6 +221,8 @@ export const API_POLICY: RoutePolicy[] = [
   { pattern: ['agent', 'dist-wallets'], methods: ['GET'], auth: 'agent' },
   { pattern: ['agent', 'wallets', ':id'], methods: ['GET'], auth: 'agent', query: ['depth'] },
   { pattern: ['agent', 'wallets', ':id', 'activate'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
+  { pattern: ['agent', 'wallets', ':id', 'personal-data'], methods: ['GET', 'PATCH'], auth: 'agent', body: 'json', sensitive: true },
+  { pattern: ['agent', 'wallets', ':id', 'identity'], methods: ['POST', 'PATCH'], auth: 'agent', body: 'either', sensitive: true },
   { pattern: ['agent', 'accounts'], methods: ['GET'], auth: 'agent' },
   { pattern: ['action', 'execute-generic'], methods: ['POST'], auth: 'agent', body: 'json', sensitive: true },
   { pattern: ['cashout-codes', 'search'], methods: ['GET'], auth: 'agent', query: ['code'] },

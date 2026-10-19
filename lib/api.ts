@@ -2,6 +2,9 @@
 // The browser never holds credentials: the session lives in an HttpOnly
 // cookie managed by the server; this client only handles the CSRF token.
 
+import type { DocumentPatch, PersonalDataPatch, WalletPersonalData } from './wallet-data'
+import type { LinkedIdentity } from '@/components/identity'
+
 const API_BASE_URL = '/api/proxy'
 const REQUEST_TIMEOUT_MS = 30_000
 // Browser-side timeout for the execute-generic send/pay request. Env-adjustable
@@ -23,6 +26,12 @@ export interface ApiResponse<T = any> {
   message?: string
   data?: T
   [key: string]: any
+}
+
+export type WalletIdentitySaveResult = {
+  walletId: string
+  identityLink: { identityRef: string; documentRef?: string; schemaVersion?: number; identityVersion?: number }
+  identity: LinkedIdentity
 }
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -242,14 +251,43 @@ class ApiClient {
   }
 
   // Wallet details — restricted custom endpoint (scrubbed, no credential fields)
-  async getWallet(id: string | number, depth: number = 2) {
+  async getWallet(id: string | number, depth: number = 2, signal?: AbortSignal) {
     const d = Math.min(5, Math.max(0, Math.floor(Number(depth) || 0)))
-    return this.request(`/agent/wallets/${encodeId(id)}?depth=${d}`)
+    return this.request(`/agent/wallets/${encodeId(id)}?depth=${d}`, { signal })
   }
 
   // Identity records are referenced by wallet.identityLink.identityRef.
-  async getLinkedIdentity(identityRef: string | number) {
-    return this.request(`/agent/identities/${encodeId(identityRef)}`)
+  async getLinkedIdentity(identityRef: string | number, signal?: AbortSignal) {
+    return this.request(`/agent/identities/${encodeId(identityRef)}`, { signal })
+  }
+
+  async getWalletPersonalData(walletId: string | number, signal?: AbortSignal) {
+    return this.request<WalletPersonalData>(`/agent/wallets/${encodeId(walletId)}/personal-data`, { signal })
+  }
+
+  async updateWalletPersonalData(walletId: string | number, patch: PersonalDataPatch) {
+    return this.request<WalletPersonalData>(`/agent/wallets/${encodeId(walletId)}/personal-data`, {
+      method: 'PATCH', body: JSON.stringify(patch),
+    })
+  }
+
+  async updateWalletIdentityDocument(walletId: string | number, document: DocumentPatch) {
+    return this.request(`/agent/wallets/${encodeId(walletId)}/identity`, {
+      method: 'PATCH', body: JSON.stringify({ document }),
+    })
+  }
+
+  async saveWalletIdentity(walletId: string | number, fields: Record<string, string>, files: {
+    front?: File | null; back?: File | null; selfie?: File | null
+  }) {
+    const form = new FormData()
+    for (const [key, value] of Object.entries(fields)) form.set(key, value)
+    if (files.front) form.set('idImageFront', files.front)
+    if (files.back) form.set('idImageBack', files.back)
+    if (files.selfie) form.set('idImageSelfi', files.selfie)
+    return this.request<WalletIdentitySaveResult>(`/agent/wallets/${encodeId(walletId)}/identity`, {
+      method: 'POST', body: form, timeoutMs: IDENTITY_UPLOAD_TIMEOUT_MS,
+    })
   }
 
   async agentLinkExistingWalletIdentity(walletId: string | number) {
@@ -562,6 +600,8 @@ class ApiClient {
     idNumber?: string
     type?: 'national' | 'passport'
     expdate?: string
+    idIssueDate?: string
+    idIssuePlace?: string
     idImageFront?: File | null
     idImageBack?: File | null
     idImageSelfi?: File | null
@@ -582,6 +622,8 @@ class ApiClient {
     if (args.idNumber) fd.set('idNumber', args.idNumber)
     if (args.type) fd.set('type', args.type)
     if (args.expdate) fd.set('expdate', args.expdate)
+    if (args.idIssueDate) fd.set('idIssueDate', args.idIssueDate)
+    if (args.idIssuePlace) fd.set('idIssuePlace', args.idIssuePlace)
     if (args.idImageFront) fd.set('idImageFront', args.idImageFront)
     if (args.idImageBack) fd.set('idImageBack', args.idImageBack)
     if (args.idImageSelfi) fd.set('idImageSelfi', args.idImageSelfi)
@@ -590,6 +632,7 @@ class ApiClient {
     return this.request('/personal-data/register', {
       method: 'POST',
       body: fd,
+      timeoutMs: IDENTITY_UPLOAD_TIMEOUT_MS,
       headers: {}, // avoid JSON content-type
     })
   }

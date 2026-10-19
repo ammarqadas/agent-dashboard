@@ -4,6 +4,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { identityDateToInput } from "@/lib/identity-date"
+export { isValidDateInput, dateInputToISO } from "@/lib/identity-date"
 
 // Keep only digits and shape them into DD-MM-YYYY (max 10 chars).
 function maskDateValue(value: string): string {
@@ -11,25 +12,6 @@ function maskDateValue(value: string): string {
   return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)]
     .filter(Boolean)
     .join("-")
-}
-
-// A complete, real calendar date typed as DD-MM-YYYY.
-export function isValidDateInput(value: string): boolean {
-  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value)
-  if (!match) return false
-  const day = Number(match[1])
-  const month = Number(match[2])
-  const year = Number(match[3])
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false
-  const date = new Date(year, month - 1, day)
-  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
-}
-
-// "DD-MM-YYYY" → "YYYY-MM-DD" for API payloads ("" when incomplete/invalid).
-export function dateInputToISO(value: string): string {
-  if (!isValidDateInput(value)) return ""
-  const [day, month, year] = value.split("-")
-  return `${year}-${month}-${day}`
 }
 
 // "YYYY-MM-DD" → "DD-MM-YYYY" for prefilling the input ("" when not ISO).
