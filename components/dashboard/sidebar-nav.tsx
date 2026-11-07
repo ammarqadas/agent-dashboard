@@ -19,6 +19,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
+import { BrandLogo, BrandName } from "@/components/brand-provider"
 
 type NavItem = {
   href: string
@@ -84,18 +85,14 @@ export function SidebarNav({
   return (
     <div className={cn("flex h-full flex-col bg-card", className)}>
       {/* Brand Header */}
-      <div className="px-4 py-5">
+      <div data-brand-component="sidebar-header" className="px-4 py-5">
         <Link href="/dashboard" className="flex items-center gap-3" onClick={onNavigate}>
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm border border-border/50 overflow-hidden">
-            <img
-              src="/logo.png"
-              alt="شمول كاش"
-              className="h-9 w-9 object-contain"
-            />
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm border border-border/50 overflow-hidden">
+            <BrandLogo className="h-14 w-14 object-contain" />
           </div>
           <div className="leading-tight min-w-0">
-            <div className="text-base font-bold text-foreground truncate">شمول كاش</div>
-            <div className="text-xs text-muted-foreground">Shumul Cash</div>
+            <div className="text-lg font-extrabold text-foreground truncate"><BrandName /></div>
+            <div className="text-xs font-semibold text-muted-foreground"><BrandName language="en" /></div>
           </div>
         </Link>
       </div>
@@ -140,7 +137,7 @@ export function SidebarNav({
       {/* Footer */}
       <div className="px-4 py-4 border-t">
         <div className="rounded-lg bg-muted/50 p-3 text-center">
-          <p className="text-xs text-muted-foreground">شمول كاش v2.1</p>
+          <p className="text-xs text-muted-foreground"><BrandName /> v2.1</p>
         </div>
       </div>
     </div>

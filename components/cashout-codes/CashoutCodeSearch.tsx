@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner"
 import type { CashoutCode } from "./types"
 import { SharePdfButton } from "@/components/receipt/share-pdf-button"
+import { BrandLogo, BrandName } from "@/components/brand-provider"
 import { formatReceiptTimestamp } from "@/lib/utils"
 
 type PayReceipt = {
@@ -310,11 +311,11 @@ function CashoutPayReceipt({
           {/* Boxed header: brand + logo */}
           <div className="border-b-2 border-dashed border-border/40 bg-muted/30 px-4 py-3 flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-extrabold text-primary leading-tight">شمول كاش — وكيل</p>
+              <p data-brand-component="receipt-header" className="text-sm font-extrabold text-primary leading-tight"><BrandName /> — وكيل</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">سحب نقدي</p>
             </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="شمول كاش" className="h-10 w-10 object-contain shrink-0" />
+            <BrandLogo className="h-10 w-10 object-contain shrink-0" />
           </div>
 
           {/* Body — one column */}

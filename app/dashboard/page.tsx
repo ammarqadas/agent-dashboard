@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { BrandLogo } from "@/components/brand-provider"
 import { Card, CardContent } from "@/components/ui/card"
 import { Search, Wallet, Coins, Receipt, User, ArrowLeft, ArrowRightLeft, TrendingUp, CreditCard, UserPlus } from "lucide-react"
 
@@ -59,8 +60,8 @@ export default function DashboardPage() {
             لوحة تحكم الوكيل - إدارة المحافظ والمعاملات المالية
           </p>
         </div>
-        <div className="hidden md:flex h-12 w-12 rounded-xl bg-primary/10 items-center justify-center">
-          <img src="/logo.png" alt="شمول كاش" className="h-8 w-8 object-contain" />
+        <div className="hidden md:flex h-16 w-16 rounded-2xl bg-white shadow-sm border border-border/50 items-center justify-center overflow-hidden">
+          <BrandLogo className="h-14 w-14 object-contain" />
         </div>
       </div>
 

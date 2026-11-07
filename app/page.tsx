@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation"
 import { LoginForm } from "@/components/login-form"
 import { apiClient } from "@/lib/api"
 import { Phone } from "lucide-react"
+import { BrandLogo, useBrand } from "@/components/brand-provider"
 
 export default function Home() {
+  const brand = useBrand()
   const router = useRouter()
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export default function Home() {
   return (
     <div className="flex min-h-screen items-center justify-center relative overflow-hidden">
       {/* Brand gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[hsl(178,72%,28%)] via-[hsl(186,70%,38%)] to-[hsl(46,60%,45%)]" />
+      <div className="absolute inset-0 brand-login-background" />
 
       {/* Overlay */}
       <div className="absolute inset-0 bg-black/10" />
@@ -40,16 +42,12 @@ export default function Home() {
 
       <div className="relative z-10 w-full max-w-md px-4">
         {/* Logo & Brand */}
-        <div className="flex flex-col items-center mb-10">
+        <div data-brand-component="login-header" className="flex flex-col items-center mb-10">
           <div className="h-25 w-25 rounded-2xl bg-white shadow-2xl flex items-center justify-center mb-5 ring-4 ring-white/20">
-            <img
-              src="/logo.png"
-              alt="شمول كاش"
-              className="h-20 w-20 object-contain"
-            />
+            <BrandLogo className="h-20 w-20 object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">شمول كاش</h1>
-          <p className="text-sm text-white/80 mt-2 font-medium">Shumul Cash Agent Portal</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">{brand.name.ar}</h1>
+          <p className="text-sm text-white/80 mt-2 font-medium">{brand.name.en} Agent Portal</p>
           <p className="text-xs text-white/60 mt-1">لوحة تحكم الوكيل</p>
         </div>
 
@@ -59,11 +57,11 @@ export default function Home() {
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <div className="flex items-center justify-center gap-2 text-white/60 text-xs">
+          {brand.support.phone && <div className="flex items-center justify-center gap-2 text-white/60 text-xs">
             <Phone className="h-3 w-3" />
-            <span>+967 778 825 844</span>
-          </div>
-          <p className="text-white/40 text-xs mt-2">جميع الحقوق محفوظة لشمول كاش © 2026</p>
+            <span dir="ltr">{brand.support.phone}</span>
+          </div>}
+          <p className="text-white/40 text-xs mt-2">جميع الحقوق محفوظة لـ {brand.companyName} © {brand.copyrightYear}</p>
         </div>
       </div>
     </div>

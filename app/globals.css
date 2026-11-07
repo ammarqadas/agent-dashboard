@@ -6,6 +6,18 @@
 @tailwind components;
 @tailwind utilities;
 
+.brand-logo-dark { display: none; }
+.dark .brand-logo-light { display: none; }
+.dark .brand-logo-dark { display: block; }
+.brand-login-background {
+  background: linear-gradient(135deg, var(--brand-gradient-start, hsl(178, 72%, 28%)), var(--brand-gradient-end, hsl(186, 70%, 38%)), var(--brand-accent, hsl(46, 60%, 45%)));
+}
+.brand-action-background {
+  background: linear-gradient(135deg, var(--brand-gradient-start, hsl(178, 72%, 28%)), var(--brand-gradient-end, hsl(186, 70%, 38%)));
+  color: hsl(var(--primary-foreground));
+}
+.brand-action-background:hover { filter: brightness(0.93); }
+
 @layer base {
   :root {
     /* Shumul Cash brand: deep teal + warm gold */
@@ -294,4 +306,23 @@
 .print-slip,
 .print-slip * {
   letter-spacing: 0 !important;
+}
+
+/* Receipt slips always render as paper, on screen, in @media print and in
+   the html2canvas PDF capture, regardless of a dark-mode session: the token
+   definitions on the slip element outrank any ancestor (html.dark) values.
+   Brand accents (--primary) and the logo/name remain profile-driven. */
+.print-slip {
+  --background: 40 10% 97%;
+  --foreground: 200 25% 15%;
+  --card: 0 0% 100%;
+  --card-foreground: 200 25% 15%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 200 25% 15%;
+  --secondary: 40 15% 94%;
+  --secondary-foreground: 200 25% 20%;
+  --muted: 40 12% 92%;
+  --muted-foreground: 200 15% 45%;
+  --border: 40 15% 88%;
+  --input: 40 15% 88%;
 }

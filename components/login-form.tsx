@@ -46,9 +46,9 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full border-0 shadow-2xl bg-white/95 backdrop-blur rounded-2xl overflow-hidden">
+    <Card data-brand-component="login-card" className="w-full border-0 shadow-2xl bg-card/95 backdrop-blur rounded-2xl overflow-hidden">
       {/* Top accent bar */}
-      <div className="h-1.5 bg-gradient-to-r from-[hsl(178,72%,28%)] via-[hsl(186,70%,38%)] to-[hsl(46,85%,45%)]" />
+      <div className="h-1.5 brand-login-background" />
 
       <CardHeader className="space-y-1 pb-4 pt-6">
         <CardTitle className="text-2xl text-center font-bold text-foreground">تسجيل الدخول</CardTitle>
@@ -106,7 +106,7 @@ export function LoginForm() {
         <CardFooter className="pb-6 pt-2">
           <Button
             type="submit"
-            className="w-full h-12 text-base font-semibold bg-gradient-to-r from-[hsl(178,72%,28%)] to-[hsl(186,70%,38%)] hover:from-[hsl(178,72%,23%)] hover:to-[hsl(186,70%,33%)] transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-70"
+            className="w-full h-12 text-base font-semibold brand-action-background transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-70"
             disabled={isLoading}
           >
             {isLoading ? (

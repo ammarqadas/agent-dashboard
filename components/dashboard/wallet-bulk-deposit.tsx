@@ -218,11 +218,11 @@ export function WalletBulkDeposit() {
   return (
     <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
       {/* Top accent */}
-      <div className="h-1.5 bg-gradient-to-r from-[hsl(178,72%,28%)] via-[hsl(186,70%,38%)] to-[hsl(46,85%,45%)]" />
+      <div className="h-1.5 brand-login-background" />
 
       <CardHeader className="pb-4">
         <div className="flex items-center gap-3">
-          <div className="icon-container bg-gradient-to-br from-[hsl(178,72%,28%)] to-[hsl(186,70%,38%)] text-white">
+          <div className="icon-container brand-action-background">
             <Wallet className="h-5 w-5" />
           </div>
           <div>
@@ -389,7 +389,7 @@ export function WalletBulkDeposit() {
         <Button
           onClick={handleSubmit}
           disabled={data.length === 0 || processing || isLoading}
-          className="w-full h-12 text-base font-semibold bg-gradient-to-r from-[hsl(178,72%,28%)] to-[hsl(186,70%,38%)] hover:from-[hsl(178,72%,23%)] hover:to-[hsl(186,70%,33%)] transition-all duration-300 shadow-lg hover:shadow-xl rounded-xl"
+          className="w-full h-12 text-base font-semibold brand-action-background transition-all duration-300 shadow-lg hover:shadow-xl rounded-xl"
         >
           {processing ? (
             <div className="flex items-center gap-2">

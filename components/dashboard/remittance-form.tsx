@@ -29,6 +29,7 @@ import { apiClient } from "@/lib/api"
 import { savePendingRemittance, loadPendingRemittance, clearPendingRemittance, hasUncertainRemittanceOutcome, remittanceSessionKey, VERIFICATION_DELAY_MS, MAX_AUTO_VERIFICATIONS } from "@/lib/pending-remittance"
 import { formatReceiptTimestamp, pickString } from "@/lib/utils"
 import { SharePdfButton } from "@/components/receipt/share-pdf-button"
+import { BrandLogo, BrandName } from "@/components/brand-provider"
 
 type SendState = "idle" | "submitting" | "checking" | "uncertain" | "in_progress" | "failed"
 
@@ -706,13 +707,13 @@ export function RemittanceForm() {
                   {/* Boxed header: brand + network | logo */}
                   <div className="border-b-2 border-dashed border-border/40 bg-muted/30 px-4 py-3 flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-base font-extrabold text-primary leading-tight">شمول كاش — وكيل</p>
+                      <p data-brand-component="receipt-header" className="text-base font-extrabold text-primary leading-tight"><BrandName /> — وكيل</p>
                       <p className="text-[11px] font-bold text-muted-foreground mt-0.5">
                         الشبكة: <span className="font-semibold text-foreground">{success.networkName || "—"}</span>
                       </p>
                     </div>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/logo.png" alt="شمول كاش" className="h-10 w-10 object-contain shrink-0" />
+                    <BrandLogo className="h-10 w-10 object-contain shrink-0" />
                   </div>
 
                   {/* Document body */}

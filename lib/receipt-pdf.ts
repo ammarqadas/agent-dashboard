@@ -8,15 +8,18 @@ type NavigatorWithCanShare = Navigator & {
 
 // Wait until the receipt fonts are actually loaded and registered for canvas
 // use — html2canvas re-renders text itself and falls back to wrong-metric
-// fonts (broken Arabic shaping) if the faces are not ready.
+// fonts (broken Arabic shaping) if the faces are not ready. BrandLocal is
+// the runtime branding family: loaded only when a profile supplies a font
+// file, so the attempt is a safe no-op otherwise.
 async function waitForReceiptFonts(): Promise<void> {
   try {
     if (typeof document === "undefined" || !("fonts" in document)) return
-    await Promise.all(
-      ["400", "700", "800"].map(weight =>
+    await Promise.all([
+      ...["400", "700", "800"].map(weight =>
         document.fonts.load(`${weight} 16px Almarai`)
-      )
-    )
+      ),
+      document.fonts.load("400 16px BrandLocal").catch(() => undefined),
+    ])
     await document.fonts.ready
   } catch {}
 }
@@ -50,17 +53,25 @@ export async function shareReceiptPdf(
     await waitForReceiptFonts()
     await waitForImages(slip)
 
+    // Resolve the active brand font family before cloning so the PDF capture
+    // stays profile-driven instead of forcing the Almarai fallback.
+    const brandFontFamily =
+      (typeof document !== "undefined" &&
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--brand-font-family")
+          .trim()) || '"Almarai", sans-serif'
+
     const canvas = await html2canvas(slip, {
       scale: 2,
       backgroundColor: "#ffffff",
       useCORS: true,
       logging: false,
       // Belt-and-braces on the cloned document: neutral letter spacing keeps
-      // Arabic joined, and an explicit font family avoids fallback metrics.
+      // Arabic joined, and the brand font list avoids fallback metrics.
       onclone: (doc: Document, node: HTMLElement | null) => {
         if (!node) return
         node.style.letterSpacing = "0"
-        node.style.fontFamily = '"Almarai", sans-serif'
+        node.style.fontFamily = brandFontFamily
         node.querySelectorAll<HTMLElement>("*").forEach(el => {
           el.style.letterSpacing = "0"
         })
