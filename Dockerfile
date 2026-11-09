@@ -19,7 +19,8 @@ COPY . .
 ENV NEXT_PUBLIC_API_URL=/api/proxy
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN npm install -g pnpm && pnpm run build
+# Reuse Next.js compilation cache across builds without reinstalling pnpm.
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 # ── Stage 3: runner ────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
