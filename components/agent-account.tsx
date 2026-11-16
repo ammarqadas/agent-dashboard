@@ -8,6 +8,7 @@ import { apiClient } from "@/lib/api"
 import { User, Mail, Shield, Hash, Wallet, RefreshCw, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ChangePasswordForm } from "@/components/account/change-password-form"
+import { PendingCommissions } from "@/components/account/pending-commissions"
 
 export function AgentAccount() {
   const [agentInfo, setAgentInfo] = useState<any>(null)
@@ -87,7 +88,7 @@ export function AgentAccount() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold mb-1">حساب الوكيل</h1>
@@ -96,12 +97,12 @@ export function AgentAccount() {
 
       {/* Agent Info Card - minimal */}
       <Card className="rounded-xl border border-border/60">
-        <CardContent className="p-5">
-          <h2 className="section-title mb-4">معلومات الوكيل</h2>
+        <CardContent className="p-4">
+          <h2 className="section-title mb-3">معلومات الوكيل</h2>
           
           {agentInfo ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="field-group flex items-center gap-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="field-group flex items-center gap-3 !p-3">
                 <div className="icon-container shrink-0">
                   <User className="h-4 w-4" />
                 </div>
@@ -111,7 +112,7 @@ export function AgentAccount() {
                 </div>
               </div>
 
-              <div className="field-group flex items-center gap-3">
+              <div className="field-group flex items-center gap-3 !p-3">
                 <div className="icon-container shrink-0">
                   <Mail className="h-4 w-4" />
                 </div>
@@ -121,7 +122,7 @@ export function AgentAccount() {
                 </div>
               </div>
 
-              <div className="field-group flex items-center gap-3">
+              <div className="field-group flex items-center gap-3 !p-3">
                 <div className="icon-container shrink-0">
                   <Shield className="h-4 w-4" />
                 </div>
@@ -133,7 +134,7 @@ export function AgentAccount() {
                 </div>
               </div>
 
-              <div className="field-group flex items-center gap-3">
+              <div className="field-group flex items-center gap-3 !p-3">
                 <div className="icon-container shrink-0">
                   <Hash className="h-4 w-4" />
                 </div>
@@ -154,8 +155,8 @@ export function AgentAccount() {
 
       {/* Agent Accounts/Balances - minimal */}
       <Card className="rounded-xl border border-border/60">
-        <CardContent className="p-5">
-          <h2 className="section-title mb-4">أرصدة الوكيل</h2>
+        <CardContent className="p-4">
+          <h2 className="section-title mb-3">أرصدة الوكيل</h2>
           
           {accounts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
@@ -182,12 +183,13 @@ export function AgentAccount() {
                   currencyCode = currencyMap[key] || key
                 }
 
-                const cardClassName = `stat-card ${currencyId ? "transition-colors hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : ""}`
+                const cardClassName = `stat-card !p-3 min-w-0 ${currencyId ? "block transition-colors hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : ""}`
                 const cardInner = (
                   <>
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="icon-container">
-                        <Wallet className="h-4 w-4" />
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="icon-container !h-8 !w-8 shrink-0"><Wallet className="h-4 w-4" /></div>
+                        <p className="text-sm font-semibold break-words">{account.name || "حساب"}</p>
                       </div>
                       <Badge
                         variant="outline"
@@ -197,16 +199,11 @@ export function AgentAccount() {
                       </Badge>
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <div>
-                        <p className="text-xs text-muted-foreground">اسم الحساب</p>
-                        <p className="text-sm font-semibold">{account.name || "حساب"}</p>
-                      </div>
-
-                      <div className="pt-2 border-t border-border/60">
-                        <p className="text-xs text-muted-foreground mb-1">الرصيد</p>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-xl font-bold text-primary" dir="ltr">
+                        <p className="text-xs text-muted-foreground">الرصيد</p>
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <span className="text-lg font-bold text-primary break-all" dir="ltr">
                             {Number(account.balance || 0).toLocaleString("en-US")}
                           </span>
                           {currencyCode && (
@@ -220,15 +217,10 @@ export function AgentAccount() {
                         )}
                       </div>
 
-                      {account.code && (
-                        <div className="pt-2 border-t border-border/60">
-                          <p className="text-xs text-muted-foreground">كود الحساب</p>
-                          <p className="font-mono text-xs" dir="ltr">{account.code}</p>
-                        </div>
-                      )}
-                      {currencyId && (
-                        <p className="pt-2 text-xs font-medium text-primary">عرض كشف الحساب ←</p>
-                      )}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2 text-xs">
+                        {account.code && <span className="text-muted-foreground">كود الحساب: <span className="font-mono" dir="ltr">{account.code}</span></span>}
+                        {currencyId && <span className="font-medium text-primary">عرض كشف الحساب ←</span>}
+                      </div>
                     </div>
                   </>
                 )
@@ -259,6 +251,8 @@ export function AgentAccount() {
           )}
         </CardContent>
       </Card>
+
+      <PendingCommissions />
 
       {/* Change Password */}
       <ChangePasswordForm />

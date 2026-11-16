@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { BrandLogo } from "@/components/brand-provider"
 import { Card, CardContent } from "@/components/ui/card"
+import { DashboardCommissions } from "@/components/dashboard-commissions"
 import { Search, Wallet, Coins, Receipt, User, ArrowLeft, ArrowRightLeft, TrendingUp, CreditCard, UserPlus } from "lucide-react"
 
 const quickActions = [
@@ -81,6 +82,8 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      <DashboardCommissions />
 
       {/* Quick Actions Grid - minimal */}
       <div>

@@ -28,6 +28,56 @@ export interface ApiResponse<T = any> {
   [key: string]: any
 }
 
+export interface AgentCommissionGroup {
+  key: string
+  type: 'collecting' | 'paying'
+  mode: 'payable' | 'tracking'
+  currencyCode: string
+  agentAccountId: number
+  accountCode?: string
+  total: string
+  legs: number
+  oldestAt: string
+  eligibleAt: string
+  threshold?: string
+  remainingAmount: string | null
+  eligible: boolean
+  eligibilityReason: string
+}
+
+export interface AgentCommissionSummary {
+  groups: AgentCommissionGroup[]
+  maximumWaitDays: number
+  automatic: {
+    enabled: boolean
+    dryRun: boolean
+    collecting: boolean
+    paying: boolean
+    nextRunAt: string
+    timezone: string
+  }
+}
+
+export interface AgentCommissionPreview {
+  id: string
+  status: string
+  expiresAt: string
+  total: string
+  legs: number
+  type: 'collecting' | 'paying'
+  currencyCode: string
+  destination: { id: number; name: string; code: string }
+}
+
+export interface AgentCommissionSettlement {
+  batchId: string
+  status: 'completed'
+  amount: string
+  legsCount: number
+  currencyCode: string
+  transactionId: number
+}
+
 export type WalletIdentitySaveResult = {
   walletId: string
   identityLink: { identityRef: string; documentRef?: string; schemaVersion?: number; identityVersion?: number }
@@ -574,6 +624,10 @@ class ApiClient {
   // Agent account — restricted endpoint (only the agent's own accounts)
   async getAgentAccount() {
     return this.request('/agent/accounts')
+  }
+
+  async getAgentCommissions() {
+    return this.request<AgentCommissionSummary>('/agent/commissions')
   }
 
   // Get currencies
