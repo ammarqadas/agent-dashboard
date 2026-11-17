@@ -1,8 +1,11 @@
+"use client"
+
 import Link from "next/link"
 import { BrandLogo } from "@/components/brand-provider"
 import { Card, CardContent } from "@/components/ui/card"
 import { DashboardCommissions } from "@/components/dashboard-commissions"
-import { Search, Wallet, Coins, Receipt, User, ArrowLeft, ArrowRightLeft, TrendingUp, CreditCard, UserPlus } from "lucide-react"
+import { useAgentAccess } from "@/components/agent-permissions"
+import { Search, Wallet, Coins, Receipt, User, ArrowLeft, ArrowRightLeft, TrendingUp, CreditCard, UserPlus, Landmark } from "lucide-react"
 
 const quickActions = [
   {
@@ -22,6 +25,12 @@ const quickActions = [
     description: "إيداع نقدي إلى محفظة العميل",
     icon: Wallet,
     href: "/dashboard/deposit",
+  },
+  {
+    title: "إيداع بنكي",
+    description: "إيداع إلى حساب بنكي من رصيد الوكيل",
+    icon: Landmark,
+    href: "/dashboard/bank-deposit",
   },
   {
     title: "حوالة الى حساب ",
@@ -51,6 +60,8 @@ const stats = [
 ]
 
 export default function DashboardPage() {
+  const { canAccess } = useAgentAccess()
+  const visibleActions = quickActions.filter((action) => canAccess(action.href))
   return (
     <div className="space-y-6">
       {/* Welcome Header - minimal */}
@@ -89,7 +100,7 @@ export default function DashboardPage() {
       <div>
         <h2 className="section-title mb-3">إجراءات سريعة</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          {quickActions.map((action) => (
+          {visibleActions.map((action) => (
             <Link key={action.href} href={action.href}>
               <Card className="group card-hover h-full cursor-pointer rounded-xl border border-border/60">
                 <CardContent className="p-4">

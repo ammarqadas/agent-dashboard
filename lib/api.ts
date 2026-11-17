@@ -398,6 +398,27 @@ class ApiClient {
     })
   }
 
+  // Shared bank-transfer action; sourceAccount is an account code resolved in the authenticated context.
+  async bankDepositPresubmit(payload: { sourceAccount: string; bankAccount: string; amount: number }) {
+    return this.request<Record<string, any>>('/presubmit/execute', {
+      method: 'POST',
+      body: JSON.stringify({
+        actionKey: 'SHMOOL_BANK_TRANSFER',
+        presubmitKey: 'shmool-bank-transfer-presubmit',
+        payload,
+      }),
+    })
+  }
+
+  async bankDeposit(payload: { sourceAccount: string; bankAccount: string; amount: number; searchToken?: string }, idempotencyKey: string) {
+    return this.request<Record<string, any>>('/action/execute-generic', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify({ actionKey: 'SHMOOL_BANK_TRANSFER', payload }),
+      timeoutMs: EXECUTE_TIMEOUT_MS,
+    })
+  }
+
   // Cashout codes
   async searchCashoutCode(code: string) {
     return this.request(`/cashout-codes/search?code=${encodeURIComponent(code)}`)

@@ -8,6 +8,8 @@ import { SidebarNav } from "@/components/dashboard/sidebar-nav"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Toaster } from "sonner"
 import { Menu, LogOut, User } from "lucide-react"
+import { AgentPageAccess, AgentPermissionsProvider } from "@/components/agent-permissions"
+import { readAgentPermissions, type AgentPermissions } from "@/lib/agent-permissions"
 
 // Route titles mapping
 const routeTitles: Record<string, string> = {
@@ -15,6 +17,7 @@ const routeTitles: Record<string, string> = {
   "/dashboard/wallet-search": "تفعيل حساب محفظة",
   "/dashboard/wallet": "تفاصيل المحفظة",
   "/dashboard/deposit": "ايداع نقدي",
+  "/dashboard/bank-deposit": "إيداع بنكي",
   "/dashboard/cashout-codes": "قائمة أكواد السحب",
   "/dashboard/cashout-codes/search": "بحث عن كود سحب",
   "/dashboard/cashout-codes/create": "إنشاء كود سحب",
@@ -33,6 +36,7 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const [agentName, setAgentName] = useState<string>("")
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [permissions, setPermissions] = useState<AgentPermissions | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -47,8 +51,10 @@ export default function DashboardLayout({
       try {
         const agentUser = JSON.parse(sessionStorage.getItem("agentUser") || "{}")
         setAgentName(agentUser.name || "وكيل")
+        setPermissions(readAgentPermissions(agentUser))
       } catch {
         setAgentName("وكيل")
+        setPermissions({})
       }
     })
     return () => {
@@ -71,6 +77,7 @@ export default function DashboardLayout({
   || "لوحة الوكيل"
 
   return (
+    <AgentPermissionsProvider value={permissions}>
     <div className="min-h-screen bg-background">
       <div className="flex min-h-screen w-full">
         {/* Desktop sidebar */}
@@ -126,12 +133,13 @@ export default function DashboardLayout({
           {/* Main content area */}
           <main className="flex-1 py-4 px-2 md:py-6 md:px-3 lg:py-8 lg:px-4 print:p-0">
             <div className="mx-auto max-w-full">
-              {children}
+              <AgentPageAccess>{children}</AgentPageAccess>
             </div>
           </main>
         </div>
       </div>
       <Toaster position="top-left" richColors closeButton dir="rtl" />
     </div>
+    </AgentPermissionsProvider>
   )
 }

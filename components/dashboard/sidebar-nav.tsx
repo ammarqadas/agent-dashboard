@@ -15,11 +15,13 @@ import {
   List,
   Plus,
   UserPlus,
+  Landmark,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
 import { BrandLogo, BrandName } from "@/components/brand-provider"
+import { useAgentAccess } from "@/components/agent-permissions"
 
 type NavItem = {
   href: string
@@ -46,6 +48,7 @@ const NAV: Array<{ title: string; items: NavItem[] }> = [
     items: [
       
       { href: "/dashboard/deposit", label: "إيداع نقدي", icon: Wallet },
+      { href: "/dashboard/bank-deposit", label: "إيداع بنكي", icon: Landmark },
       { href: "/dashboard/remittance", label: "حوالة الى حساب", icon: ArrowRightLeft },
       { href: "/dashboard/remittance-search", label: "دفع حوالة", icon: Search },
     
@@ -81,6 +84,8 @@ export function SidebarNav({
   onNavigate?: () => void
 }) {
   const pathname = usePathname()
+  const { canAccess } = useAgentAccess()
+  const visibleGroups = NAV.map((group) => ({ ...group, items: group.items.filter((item) => canAccess(item.href)) })).filter((group) => group.items.length > 0)
 
   return (
     <div className={cn("flex h-full flex-col bg-card", className)}>
@@ -101,7 +106,7 @@ export function SidebarNav({
 
       {/* Navigation */}
       <nav className="flex-1 overflow-auto px-3 py-4">
-        {NAV.map((group, idx) => (
+        {visibleGroups.map((group, idx) => (
           <div key={group.title} className={cn(idx > 0 && "mt-6")}>
             <div className="px-3 mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">
               {group.title}
